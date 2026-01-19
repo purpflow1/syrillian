@@ -68,6 +68,9 @@ pub use fp_movement::FirstPersonMovementController;
 pub use freecam::FreecamController;
 pub use gravity::GravityComponent;
 pub use image::Image;
+pub use joints::{
+    FixedJoint, PrismaticJoint, RevoluteJoint, RopeJoint, SphericalJoint, SpringJoint,
+};
 pub use light::{PointLightComponent, SpotLightComponent, Sun, SunLightComponent};
 pub use mesh_renderer::MeshRenderer;
 pub use panel::Panel;
