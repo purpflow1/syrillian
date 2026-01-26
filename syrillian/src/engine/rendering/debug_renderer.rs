@@ -1,6 +1,5 @@
 use std::sync::RwLock;
 
-#[cfg(debug_assertions)]
 static DEBUG_RENDERER: RwLock<DebugRenderer> = RwLock::new(DebugRenderer::default_const());
 
 #[derive(Debug, Clone)]

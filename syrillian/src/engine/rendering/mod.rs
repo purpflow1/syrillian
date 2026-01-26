@@ -43,7 +43,6 @@ pub mod state;
 pub mod texture_export;
 pub(crate) mod uniform;
 
-#[cfg(debug_assertions)]
 pub mod debug_renderer;
 pub mod strobe;
 
@@ -52,7 +51,6 @@ pub use context::*;
 pub use message::*;
 pub use picking::*;
 
-#[cfg(debug_assertions)]
 pub use debug_renderer::*;
 
 pub use wgpu::TextureFormat;

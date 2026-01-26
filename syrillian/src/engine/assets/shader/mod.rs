@@ -104,22 +104,13 @@ impl H<Shader> {
     pub const TEXT_2D_PICKER_ID: u32 = 7;
     pub const TEXT_3D_ID: u32 = 8;
     pub const TEXT_3D_PICKER_ID: u32 = 9;
-    #[cfg(not(debug_assertions))]
-    pub const MAX_BUILTIN_ID: u32 = 9;
 
-    #[cfg(debug_assertions)]
     pub const DEBUG_EDGES_ID: u32 = 10;
-    #[cfg(debug_assertions)]
     pub const DEBUG_VERTEX_NORMALS_ID: u32 = 11;
-    #[cfg(debug_assertions)]
     pub const DEBUG_LINES_ID: u32 = 12;
-    #[cfg(debug_assertions)]
     pub const DEBUG_TEXT2D_GEOMETRY_ID: u32 = 13;
-    #[cfg(debug_assertions)]
     pub const DEBUG_TEXT3D_GEOMETRY_ID: u32 = 14;
-    #[cfg(debug_assertions)]
     pub const DEBUG_LIGHT_ID: u32 = 15;
-    #[cfg(debug_assertions)]
     pub const MAX_BUILTIN_ID: u32 = 15;
 
     // The fallback shader if a pipeline fails
@@ -153,21 +144,15 @@ impl H<Shader> {
     pub const TEXT_3D_PICKING: H<Shader> = H::new(Self::TEXT_3D_PICKER_ID);
 
     // An addon shader ID that is used for drawing debug edges on meshes
-    #[cfg(debug_assertions)]
     pub const DEBUG_EDGES: H<Shader> = H::new(Self::DEBUG_EDGES_ID);
 
     // An addon shader ID that is used for drawing debug vertex normals on meshes
-    #[cfg(debug_assertions)]
     pub const DEBUG_VERTEX_NORMALS: H<Shader> = H::new(Self::DEBUG_VERTEX_NORMALS_ID);
 
     // An addon shader ID that is used for drawing debug lines
-    #[cfg(debug_assertions)]
     pub const DEBUG_LINES: H<Shader> = H::new(Self::DEBUG_LINES_ID);
-    #[cfg(debug_assertions)]
     pub const DEBUG_TEXT2D_GEOMETRY: H<Shader> = H::new(Self::DEBUG_TEXT2D_GEOMETRY_ID);
-    #[cfg(debug_assertions)]
     pub const DEBUG_TEXT3D_GEOMETRY: H<Shader> = H::new(Self::DEBUG_TEXT3D_GEOMETRY_ID);
-    #[cfg(debug_assertions)]
     pub const DEBUG_LIGHT: H<Shader> = H::new(Self::DEBUG_LIGHT_ID);
 }
 

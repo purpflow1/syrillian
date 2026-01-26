@@ -7,17 +7,13 @@ use nalgebra::{Affine3, Matrix4};
 use std::any::Any;
 use std::fmt::Debug;
 
+pub mod debug_proxy;
 pub mod mesh_proxy;
 pub mod text_proxy;
 
-#[cfg(debug_assertions)]
-pub mod debug_proxy;
-
+pub use debug_proxy::*;
 pub use mesh_proxy::*;
 pub use text_proxy::*;
-
-#[cfg(debug_assertions)]
-pub use debug_proxy::*;
 
 #[macro_export]
 macro_rules! proxy_data_mut {
