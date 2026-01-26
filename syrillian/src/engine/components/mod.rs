@@ -2,6 +2,8 @@
 //!
 //! Components implement behavior ranging from camera control to physics. If it's dynamic,
 //! it's probably a component.
+//! 
+//! You can find some preset / built-in components in the syrillian_components crate
 //!
 //! To make a component:
 //! ```rust
@@ -34,49 +36,11 @@
 //! }
 //! ```
 
-pub mod animation;
-pub mod audio;
-pub mod button;
 pub mod camera;
-pub mod collider;
-pub mod fp_camera;
-pub mod fp_movement;
-pub mod freecam;
-pub mod gravity;
-pub mod image;
-pub mod joints;
-pub mod light;
-pub mod mesh_renderer;
-pub mod panel;
-pub mod rigid_body;
-pub mod rotate;
-pub mod skeletal;
-pub mod text;
-pub mod ui_rect;
-
 #[cfg(debug_assertions)]
 pub mod camera_debug;
 
-pub use animation::AnimationComponent;
-pub use button::Button;
 pub use camera::CameraComponent;
-pub use collider::Collider3D;
-pub use fp_camera::FirstPersonCameraController;
-pub use fp_movement::FirstPersonMovementController;
-pub use freecam::FreecamController;
-pub use gravity::GravityComponent;
-pub use image::Image;
-pub use joints::{
-    FixedJoint, PrismaticJoint, RevoluteJoint, RopeJoint, SphericalJoint, SpringJoint,
-};
-pub use light::{PointLightComponent, SpotLightComponent, Sun, SunLightComponent};
-pub use mesh_renderer::MeshRenderer;
-pub use panel::Panel;
-pub use rigid_body::RigidBodyComponent;
-pub use rotate::RotateComponent;
-pub use skeletal::SkeletalComponent;
-pub use text::{Text2D, Text3D};
-pub use ui_rect::UiRect;
 
 #[cfg(debug_assertions)]
 pub use camera_debug::*;
@@ -84,12 +48,12 @@ pub use camera_debug::*;
 use crate::World;
 use crate::core::GameObjectId;
 use crate::core::component_context_inference::ComponentContextInference;
-use crate::core::reflection::{ReflectedTypeInfo, Value, type_info};
+use crate::core::reflection::{type_info, ReflectedTypeInfo, Value};
 use crate::rendering::lights::LightProxy;
 use crate::rendering::proxies::SceneProxy;
 use crate::rendering::{CPUDrawCtx, UiContext};
 use delegate::delegate;
-use slotmap::{Key, new_key_type};
+use slotmap::{new_key_type, Key};
 use std::any::{Any, TypeId};
 use std::borrow::Borrow;
 use std::fmt::{Debug, Formatter};

@@ -7,7 +7,7 @@
 //! Example on how to interact with the store:
 //! ```rust
 //! use syrillian::assets::{HMaterial, Material};
-//! use syrillian::prefabs::CubePrefab;
+//! use syrillian_components::prefabs::CubePrefab;
 //! use syrillian::World;
 //!
 //! fn update(world: &mut World) {
@@ -26,8 +26,6 @@
 //! ```
 //!
 //! To see how you can use an asset on the GPU, check [`AssetCache`](crate::rendering::AssetCache)
-
-pub mod scene_loader;
 
 mod asset_store;
 pub(crate) mod generic_store;

@@ -5,9 +5,9 @@
 use nalgebra::UnitQuaternion;
 use std::error::Error;
 use syrillian::AppState;
-use syrillian::assets::scene_loader::SceneLoader;
+use syrillian_scene::SceneLoader;
 use syrillian::core::GameObjectId;
-use syrillian::prefabs::prefab::Prefab;
+use syrillian::prefabs::Prefab;
 use syrillian::world::World;
 use syrillian_macros::SyrillianApp;
 

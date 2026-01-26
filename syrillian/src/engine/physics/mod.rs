@@ -6,3 +6,7 @@
 pub mod simulator;
 
 pub use simulator::*;
+
+pub use ::rapier3d;
+
+pub use ::rapier3d::geometry::Ray;

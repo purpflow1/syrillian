@@ -3,17 +3,8 @@
 //! Prefabs create game objects with common configurations such as a basic
 //! camera or a textured cube.
 
-pub mod camera;
-pub mod cube;
-pub mod first_person_player;
-pub mod prefab;
-pub mod sphere;
-pub mod sun;
+mod camera;
+mod prefab;
 
 pub use prefab::Prefab;
-
-// Premade for you :)
 pub use camera::CameraPrefab;
-pub use cube::CubePrefab;
-pub use first_person_player::FirstPersonPlayerPrefab;
-pub use sun::SunPrefab;

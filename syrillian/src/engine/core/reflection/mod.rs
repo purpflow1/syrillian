@@ -178,6 +178,6 @@ impl<R: Reflect> ReflectSerialize for R {
 
             map.insert(field.name.to_string(), (ty.actions.serialize)(field_ptr));
         }
-        Value::Map(map)
+        Value::Object(map)
     }
 }

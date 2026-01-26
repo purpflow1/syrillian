@@ -138,11 +138,11 @@ impl GameObjectId {
         GameObjectWeak(*self)
     }
 
-    pub(crate) fn as_ffi(&self) -> u64 {
+    pub fn as_ffi(&self) -> u64 {
         self.0.as_ffi()
     }
 
-    pub(crate) fn from_ffi(id: u64) -> GameObjectId {
+    pub fn from_ffi(id: u64) -> GameObjectId {
         GameObjectId(KeyData::from_ffi(id))
     }
 }

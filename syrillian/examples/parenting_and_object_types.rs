@@ -2,8 +2,8 @@
 
 use std::error::Error;
 
-use syrillian::assets::scene_loader::SceneLoader;
-use syrillian::components::RotateComponent;
+use syrillian_scene::SceneLoader;
+use syrillian_components::RotateComponent;
 use syrillian::utils::frame_counter::FrameCounter;
 use syrillian::world::World;
 use syrillian::{AppState, ENGINE_STR};

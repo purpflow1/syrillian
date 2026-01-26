@@ -1,6 +1,6 @@
 use super::{StrobeFrame, UiDraw};
 use crate::RenderTargetId;
-use crate::components::mesh_renderer::BoneData;
+use crate::core::bone::BoneData;
 use crate::core::ModelUniform;
 use crate::rendering::cache::AssetCache;
 use crate::rendering::proxies::mesh_proxy::{MeshUniformIndex, RuntimeMeshData};

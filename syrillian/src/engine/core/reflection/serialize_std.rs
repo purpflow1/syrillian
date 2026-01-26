@@ -18,6 +18,6 @@ where
             .iter()
             .map(|(k, v)| (k.into(), V::serialize(v)))
             .collect();
-        Value::Map(map)
+        Value::Object(map)
     }
 }

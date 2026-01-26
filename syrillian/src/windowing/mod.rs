@@ -9,6 +9,7 @@ pub mod state;
 
 pub use app::*;
 pub use state::*;
+pub use winit::dpi::PhysicalSize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct RenderTargetId(pub u64);

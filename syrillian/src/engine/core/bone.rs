@@ -1,4 +1,4 @@
-use crate::ensure_aligned;
+use crate::{ensure_aligned, MAX_BONES};
 use nalgebra::Matrix4;
 use std::collections::HashMap;
 
@@ -50,3 +50,46 @@ impl Bones {
         Bones::default()
     }
 }
+
+#[derive(Debug, Default, Clone)]
+pub struct BoneData {
+    pub(crate) bones: Vec<Bone>,
+}
+
+impl BoneData {
+    #[rustfmt::skip]
+    pub const DUMMY: [Bone; MAX_BONES] = [Bone {
+        transform: Matrix4::new(
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        )
+    }; MAX_BONES];
+
+    pub fn new_full_identity() -> Self {
+        Self {
+            bones: vec![
+                Bone {
+                    transform: Matrix4::identity()
+                };
+                MAX_BONES
+            ],
+        }
+    }
+
+    pub fn set_first_n(&mut self, mats: &[Matrix4<f32>]) {
+        for (i, m) in mats.iter().take(self.bones.len()).enumerate() {
+            self.bones[i].transform = *m;
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        self.bones.len()
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        bytemuck::cast_slice(&self.bones)
+    }
+}
+

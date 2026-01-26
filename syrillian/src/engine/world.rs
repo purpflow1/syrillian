@@ -10,7 +10,7 @@ use crate::components::{CRef, CWeak, CameraComponent, Component};
 use crate::core::component_storage::ComponentStorage;
 use crate::core::{EventType, GameObject, GameObjectId, GameObjectRef, ObjectHash, Transform};
 use crate::engine::assets::AssetStore;
-use crate::engine::prefabs::prefab::Prefab;
+use crate::engine::prefabs::Prefab;
 use crate::game_thread::GameAppEvent;
 use crate::input::InputManager;
 use crate::physics::PhysicsManager;

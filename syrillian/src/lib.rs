@@ -3,6 +3,7 @@ extern crate self as syrillian;
 pub mod engine;
 pub mod utils;
 pub mod windowing;
+pub mod math;
 
 pub use engine::*;
 pub use rendering::strobe;

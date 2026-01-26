@@ -7,3 +7,7 @@ mod gamepad_manager;
 pub mod input_manager;
 
 pub use self::input_manager::*;
+
+pub use winit::keyboard::KeyCode;
+pub use winit::event::MouseButton;
+pub use gilrs::{Axis, Button};

@@ -49,12 +49,12 @@ reflect_primitive!(i128, this => Value::VeryBigInt(*this), cell);
 reflect_primitive!(u8, this => Value::UInt(*this as u32), cell);
 reflect_primitive!(u16, this => Value::UInt(*this as u32), cell);
 reflect_primitive!(u32, this => Value::UInt(*this), cell);
-reflect_primitive!(u64, this => Value::UBigInt(*this), cell);
-reflect_primitive!(usize, this => Value::UBigInt(*this as u64), cell);
-reflect_primitive!(u128, this => Value::UVeryBigInt(*this), cell);
+reflect_primitive!(u64, this => Value::BigUInt(*this), cell);
+reflect_primitive!(usize, this => Value::BigUInt(*this as u64), cell);
+reflect_primitive!(u128, this => Value::VeryBigUInt(*this), cell);
 reflect_primitive!(bool, this => Value::Bool(*this), cell);
 reflect_primitive!(Value, this => this.clone());
-reflect_primitive!(Duration, this => Value::UVeryBigInt(this.as_millis()), cell);
+reflect_primitive!(Duration, this => Value::VeryBigUInt(this.as_millis()), cell);
 
 register_primitive_type!(Vec<GameObjectId>);
 register_primitive_type!(Vec<CRef<dyn Component>>);

@@ -1,6 +1,6 @@
 use syrillian::World;
-use syrillian::components::RopeJoint;
-use syrillian::components::joints::RopeConfig;
+use syrillian_components::RopeJoint;
+use syrillian_components::joints::RopeConfig;
 use syrillian::core::reflection::Reflect;
 use syrillian::reflection::{function_info, function_infos};
 

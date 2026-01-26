@@ -5,13 +5,14 @@
 
 use nalgebra::{UnitQuaternion, Vector3};
 use std::error::Error;
-use syrillian::assets::scene_loader::SceneLoader;
-use syrillian::components::{Component, SkeletalComponent};
+use syrillian_scene::SceneLoader;
+use syrillian_components::{SkeletalComponent};
 use syrillian::{AppState, World};
 use syrillian_macros::SyrillianApp;
 
 #[cfg(debug_assertions)]
 use winit::keyboard::KeyCode;
+use syrillian::components::Component;
 
 #[derive(Debug, Default, SyrillianApp)]
 struct BonesExample;

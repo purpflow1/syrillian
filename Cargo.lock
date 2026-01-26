@@ -3646,7 +3646,6 @@ dependencies = [
  "fontdb",
  "futures",
  "gilrs",
- "gltf",
  "image",
  "inventory",
  "itertools",
@@ -3660,12 +3659,13 @@ dependencies = [
  "obj",
  "once_cell",
  "rapier3d",
- "serde_json",
  "slotmap",
  "smallvec",
  "snafu",
  "static_assertions",
+ "syrillian_components",
  "syrillian_macros",
+ "syrillian_scene",
  "syrillian_utils",
  "tokio",
  "tracing",
@@ -3682,6 +3682,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "syrillian_components"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "delegate",
+ "itertools",
+ "kira",
+ "more-asserts",
+ "num-traits",
+ "snafu",
+ "syrillian",
+ "web-time",
+]
+
+[[package]]
 name = "syrillian_macros"
 version = "0.5.0"
 dependencies = [
@@ -3689,6 +3704,18 @@ dependencies = [
  "syn",
  "syrillian_utils",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "syrillian_scene"
+version = "0.1.0"
+dependencies = [
+ "gltf",
+ "itertools",
+ "serde_json",
+ "snafu",
+ "syrillian",
+ "syrillian_components",
 ]
 
 [[package]]

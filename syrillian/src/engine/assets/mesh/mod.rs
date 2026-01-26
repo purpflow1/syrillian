@@ -32,7 +32,7 @@ pub enum MeshError {
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
-    pub(crate) data: Arc<MeshVertexData<Vertex3D>>,
+    pub data: Arc<MeshVertexData<Vertex3D>>,
     pub material_ranges: Vec<Range<u32>>,
     pub bones: Bones,
     pub bounding_sphere: BoundingSphere,
@@ -40,8 +40,8 @@ pub struct Mesh {
 
 #[derive(Debug, Clone)]
 pub struct MeshVertexData<T: Debug + Clone> {
-    pub(crate) vertices: Vec<T>,
-    pub(crate) indices: Option<Vec<u32>>,
+    pub vertices: Vec<T>,
+    pub indices: Option<Vec<u32>>,
 }
 
 impl Mesh {

@@ -55,5 +55,7 @@ pub use picking::*;
 #[cfg(debug_assertions)]
 pub use debug_renderer::*;
 
+pub use wgpu::TextureFormat;
+
 pub(crate) use renderer::*;
 pub(crate) use state::*;

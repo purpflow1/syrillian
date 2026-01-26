@@ -1,11 +1,11 @@
 use crate::components::Component;
+use crate::math::{Point3, Vector3, Vector4};
+use crate::physics::Ray;
 use crate::rendering::CPUDrawCtx;
 use crate::rendering::proxies::SceneProxy;
 use crate::rendering::proxies::debug_proxy::{DebugLine, DebugSceneProxy};
 use crate::{World, proxy_data_mut};
 use itertools::Itertools;
-use nalgebra::{Point3, Vector3, Vector4};
-use rapier3d::geometry::Ray;
 use syrillian_macros::Reflect;
 use web_time::{Duration, Instant};
 

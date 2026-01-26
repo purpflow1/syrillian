@@ -26,11 +26,11 @@ impl JsonSerializer {
             Value::Double(d) => *json += &d.to_string(),
             Value::UInt(i) => *json += &i.to_string(),
             Value::Int(i) => *json += &i.to_string(),
-            Value::UBigInt(i) => *json += &i.to_string(),
+            Value::BigUInt(i) => *json += &i.to_string(),
             Value::BigInt(i) => *json += &i.to_string(),
-            Value::UVeryBigInt(i) => *json += &i.to_string(),
+            Value::VeryBigUInt(i) => *json += &i.to_string(),
             Value::VeryBigInt(i) => *json += &i.to_string(),
-            Value::Map(m) => {
+            Value::Object(m) => {
                 json.push('{');
                 let mut first = true;
                 for (k, v) in m {
@@ -62,7 +62,6 @@ impl JsonSerializer {
             Value::None => *json += "null",
             Value::Bool(true) => *json += "true",
             Value::Bool(false) => *json += "false",
-            Value::Serde(_) => {} // FIXME
         }
     }
 }
