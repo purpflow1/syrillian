@@ -4,6 +4,9 @@ use kira::{AudioManager, AudioManagerSettings, DefaultBackend, Tween};
 use nalgebra::{Quaternion, Vector3};
 use tracing::error;
 
+pub use kira::effect;
+pub use kira::track;
+
 struct AudioSceneInner {
     manager: AudioManager<DefaultBackend>,
     listener: ListenerHandle,

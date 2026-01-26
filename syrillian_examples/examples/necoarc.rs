@@ -1,17 +1,17 @@
 //! Example that renders a textured spinning cube and some 2d images.
 
-use nalgebra::Vector3;
-use rapier3d::prelude::QueryFilter;
 use std::error::Error;
+use syrillian::SyrillianApp;
 use syrillian::assets::{Material, StoreType, Texture};
 use syrillian::core::{GameObjectExt, GameObjectId};
+use syrillian::input::MouseButton;
+use syrillian::math::Vector3;
+use syrillian::physics::QueryFilter;
 use syrillian::strobe::ImageScalingMode;
+use syrillian::tracing::{info, warn};
 use syrillian::{AppState, World};
 use syrillian_components::prefabs::CubePrefab;
 use syrillian_components::{Button, Collider3D, Image, RotateComponent};
-use syrillian_macros::SyrillianApp;
-use tracing::{info, warn};
-use winit::event::MouseButton;
 
 const NECO_IMAGE: &[u8; 1293] = include_bytes!("assets/neco.jpg");
 

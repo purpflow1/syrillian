@@ -7,7 +7,6 @@
 //! Example on how to interact with the store:
 //! ```rust
 //! use syrillian::assets::{HMaterial, Material};
-//! use syrillian_components::prefabs::CubePrefab;
 //! use syrillian::World;
 //!
 //! fn update(world: &mut World) {
@@ -18,10 +17,6 @@
 //!
 //!     // add an asset
 //!     let material: HMaterial = world.assets.materials.add(material);
-//!
-//!     // Spawn a cube prefab with the material
-//!     let cube_prefab = CubePrefab::new(material);
-//!     let cube = world.spawn(&cube_prefab);
 //! }
 //! ```
 //!

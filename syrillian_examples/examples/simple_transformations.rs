@@ -2,13 +2,13 @@
 //!
 //! Also uses a simple Prefab as an example on - well, how to do that.
 
-use nalgebra::UnitQuaternion;
 use std::error::Error;
 use syrillian::AppState;
+use syrillian::SyrillianApp;
 use syrillian::core::GameObjectId;
+use syrillian::math::UnitQuaternion;
 use syrillian::prefabs::Prefab;
 use syrillian::world::World;
-use syrillian_macros::SyrillianApp;
 use syrillian_scene::SceneLoader;
 
 #[derive(Debug, Default, SyrillianApp)]

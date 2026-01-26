@@ -8,13 +8,13 @@
 resolver = "2"
 members = [
     "syrillian",
-    "syrillian_components",
+    "syrillian_components", "syrillian_examples",
     "syrillian_macros", "syrillian_scene",
-    "syrillian_utils"
+    "syrillian_utils", "syrillian_examples"
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.6.1"
 license = "MIT"
 edition = "2024"
 repository = "https://github.com/Kek5chen/syrillian"
@@ -37,8 +37,9 @@ lto = "fat"
 panic = "abort"
 
 [workspace.dependencies]
-syrillian = { version = "0.6.0", path = "syrillian", default-features = false }
-syrillian_utils = { version = "0.6.0", path = "syrillian_utils", default-features = false }
-syrillian_macros = { version = "0.6.0", path = "syrillian_macros", default-features = false }
+syrillian = { version = "0.6.1", path = "syrillian", default-features = false }
+syrillian_utils = { version = "0.6.1", path = "syrillian_utils", default-features = false }
+syrillian_macros = { version = "0.6.1", path = "syrillian_macros", default-features = false }
 syrillian_components = { version = "0.1.0", path = "syrillian_components", default-features = false }
 syrillian_scene = { version = "0.1.0", path = "syrillian_scene", default-features = false }
+syrillian_examples = { version = "0.1.0", path = "syrillian_examples", default-features = false }

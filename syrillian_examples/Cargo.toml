@@ -1,0 +1,18 @@
+[package]
+name = "syrillian_examples"
+version = "0.1.0"
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dev-dependencies]
+syrillian.workspace = true
+syrillian_components.workspace = true
+syrillian_scene.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+crossbeam-channel = "0.5"
+itertools = "0.14"
+notify = "8.2"
+slotmap = "1.1"
+web-time = "1.1"

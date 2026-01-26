@@ -2152,9 +2152,12 @@ dependencies = [
 
 [[package]]
 name = "notify-types"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e0826a989adedc2a244799e823aece04662b66609d96af8dff7ac6df9a8925d"
+checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
+dependencies = [
+ "bitflags 2.10.0",
+]
 
 [[package]]
 name = "nu-ansi-term"
@@ -3502,7 +3505,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "bitflags 2.10.0",
  "bon",
@@ -3525,7 +3528,6 @@ dependencies = [
  "more-asserts",
  "naga",
  "nalgebra",
- "notify",
  "num-traits",
  "num_enum",
  "obj",
@@ -3535,13 +3537,10 @@ dependencies = [
  "smallvec",
  "snafu",
  "static_assertions",
- "syrillian_components",
  "syrillian_macros",
- "syrillian_scene",
  "syrillian_utils",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "ttf-parser",
  "uuid",
  "wasm-bindgen-test",
@@ -3566,8 +3565,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "syrillian_examples"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "itertools",
+ "notify",
+ "slotmap",
+ "syrillian",
+ "syrillian_components",
+ "syrillian_scene",
+ "tracing-subscriber",
+ "web-time",
+]
+
+[[package]]
 name = "syrillian_macros"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "quote",
  "syn",
@@ -3589,7 +3603,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian_utils"
-version = "0.6.0"
+version = "0.6.1"
 
 [[package]]
 name = "termcolor"

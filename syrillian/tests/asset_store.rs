@@ -99,7 +99,8 @@ fn test_font_store() {
 #[cfg(not(target_arch = "wasm32"))]
 fn test_sound_store() {
     let store = AssetStore::new();
-    let sound = Sound::load_sound("examples/assets/pop.wav").expect("Failed to load sound");
+    let sound = Sound::load_sound("../syrillian_examples/examples/assets/pop.wav")
+        .expect("Failed to load sound");
     let handle = store.sounds.add(sound);
     let retrieved_sound = store.sounds.try_get(handle);
     assert!(retrieved_sound.is_some());

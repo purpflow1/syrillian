@@ -14,8 +14,9 @@ pub use ::inventory;
 pub use ::tracing;
 pub use ::winit;
 
-#[cfg(feature = "derive")]
 pub use ::syrillian_macros;
 
 #[cfg(feature = "derive")]
-pub use ::syrillian_macros::{Reflect, SyrillianApp, reflect_fn};
+pub use ::syrillian_macros::SyrillianApp;
+
+pub use ::syrillian_macros::{Reflect, reflect_fn};

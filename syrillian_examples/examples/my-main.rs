@@ -4,24 +4,26 @@
 //!    with new features. Therefore, it should contain the latest and greatest. I can recommend
 //!    using this for reference.
 
-use gilrs::Button;
-use kira::effect::reverb::ReverbBuilder;
-use kira::track::SpatialTrackBuilder;
-use nalgebra::UnitQuaternion;
-use rapier3d::parry::query::Ray;
-use rapier3d::prelude::{ColliderHandle, QueryFilter};
 use std::error::Error;
 use syrillian::assets::{HMaterial, HSound, Sound, StoreType};
 use syrillian::assets::{Material, Shader};
+use syrillian::audio::effect::reverb::ReverbBuilder;
+use syrillian::audio::track::SpatialTrackBuilder;
 use syrillian::components::{CRef, CameraComponent};
 use syrillian::core::reflection::ReflectSerialize;
 use syrillian::core::reflection::serializer::JsonSerializer;
 use syrillian::core::{GameObjectExt, GameObjectId, GameObjectRef};
+use syrillian::input::Button;
+use syrillian::input::{KeyCode, MouseButton};
+use syrillian::math::UnitQuaternion;
+use syrillian::physics::Ray;
+use syrillian::physics::rapier3d::prelude::{ColliderHandle, QueryFilter};
 use syrillian::prefabs::Prefab;
 #[cfg(debug_assertions)]
 use syrillian::rendering::DebugRenderer;
 use syrillian::rendering::lights::Light;
 use syrillian::strobe::TextAlignment;
+use syrillian::tracing::{error, info};
 use syrillian::utils::FrameCounter;
 use syrillian::{AppRuntime, AppState, World};
 use syrillian_components::prefabs::{CubePrefab, FirstPersonPlayerPrefab};
@@ -30,12 +32,9 @@ use syrillian_components::{
     RigidBodyComponent, RopeJoint, RotateComponent, SpotLightComponent, SpringJoint, Text3D,
 };
 use syrillian_scene::SceneLoader;
-use tracing::{error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
-use winit::event::MouseButton;
-use winit::keyboard::KeyCode;
 // const NECO_IMAGE: &[u8; 1293] = include_bytes!("assets/neco.jpg");
 
 const SHADER1: &str = include_str!("dynamic_shader/shader.wgsl");
@@ -552,7 +551,7 @@ impl Prefab for City {
     }
 
     fn build(&self, world: &mut World) -> GameObjectId {
-        let testmap = include_bytes!("../testmodels/testmap/testmap.glb");
+        let testmap = include_bytes!("../../syrillian/testmodels/testmap/testmap.glb");
         let mut city = SceneLoader::load_buffer(world, testmap).expect("Failed to load city file");
 
         // add colliders to city

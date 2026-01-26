@@ -3,16 +3,15 @@
 //! The goal of this is to test if bones are working as expected and to
 //! aid in the development in the first place.
 
-use nalgebra::{UnitQuaternion, Vector3};
 use std::error::Error;
-use syrillian::{AppState, World};
+use syrillian::math::{UnitQuaternion, Vector3};
+use syrillian::{AppState, SyrillianApp, World};
 use syrillian_components::SkeletalComponent;
-use syrillian_macros::SyrillianApp;
 use syrillian_scene::SceneLoader;
 
 use syrillian::components::Component;
 #[cfg(debug_assertions)]
-use winit::keyboard::KeyCode;
+use syrillian::input::KeyCode;
 
 #[derive(Debug, Default, SyrillianApp)]
 struct BonesExample;

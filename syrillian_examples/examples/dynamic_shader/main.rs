@@ -8,14 +8,14 @@ use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use slotmap::Key;
 use std::error::Error;
 use std::fs;
+use syrillian::SyrillianApp;
 use syrillian::assets::{HMaterial, HShader, Material, Shader, StoreType};
 use syrillian::core::GameObjectId;
+use syrillian::tracing::{debug, error, info};
 use syrillian::utils::validate_wgsl_source;
 use syrillian::{AppState, World};
 use syrillian_components::RotateComponent;
 use syrillian_components::prefabs::CubePrefab;
-use syrillian_macros::SyrillianApp;
-use tracing::{debug, error, info};
 use web_time::Instant;
 
 #[cfg(debug_assertions)]
@@ -23,7 +23,7 @@ use syrillian::rendering::DebugRenderer;
 
 const SHADER_PATH: &str = "examples/dynamic_shader/shader.wgsl";
 const DEFAULT_VERT: &str =
-    include_str!("../../src/engine/assets/shader/shaders/default_vertex3d.wgsl");
+    include_str!("../../../syrillian/src/engine/assets/shader/shaders/default_vertex3d.wgsl");
 
 #[derive(SyrillianApp)]
 struct DynamicShaderExample {
@@ -180,7 +180,7 @@ impl AppState for DynamicShaderExample {
 
         #[cfg(debug_assertions)]
         {
-            use winit::keyboard::KeyCode;
+            use syrillian::input::KeyCode;
 
             if world.input.is_key_down(KeyCode::KeyL) {
                 DebugRenderer::next_mode();

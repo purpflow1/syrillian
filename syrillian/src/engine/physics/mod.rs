@@ -10,3 +10,4 @@ pub use simulator::*;
 pub use ::rapier3d;
 
 pub use ::rapier3d::geometry::Ray;
+pub use ::rapier3d::pipeline::QueryFilter;
