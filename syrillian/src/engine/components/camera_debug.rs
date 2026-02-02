@@ -1,9 +1,9 @@
 use crate::components::Component;
 use crate::math::{Vec3, Vec4};
 use crate::physics::Ray;
-use crate::rendering::{CPUDrawCtx, DebugRenderer};
 use crate::rendering::proxies::SceneProxy;
 use crate::rendering::proxies::debug_proxy::{DebugLine, DebugSceneProxy};
+use crate::rendering::{CPUDrawCtx, DebugRenderer};
 use crate::{World, proxy_data_mut};
 use itertools::Itertools;
 use syrillian_macros::Reflect;
@@ -41,7 +41,7 @@ impl CameraDebug {
         if !DebugRenderer::physics_rays() {
             return;
         }
-        
+
         self.rays.push(DebugRay {
             origin: ray.origin,
             direction: ray.dir,

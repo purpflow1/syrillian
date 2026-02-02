@@ -16,8 +16,10 @@ pub struct AssetCache {
     pub shaders: Cache<Shader>,
     pub textures: Cache<Texture2D>,
     pub texture_arrays: Cache<Texture2DArray>,
+    pub cubemaps: Cache<Cubemap>,
     pub render_textures: Cache<RenderTexture2D>,
     pub render_texture_arrays: Cache<RenderTexture2DArray>,
+    pub render_cubemaps: Cache<RenderCubemap>,
     pub materials: Cache<Material>,
     pub bgls: Cache<BGL>,
     pub fonts: Cache<Font>,
@@ -36,6 +38,7 @@ impl AssetCache {
             shaders: Cache::new(store.shaders.clone(), device.clone(), queue.clone()),
             textures: Cache::new(store.textures.clone(), device.clone(), queue.clone()),
             texture_arrays: Cache::new(store.texture_arrays.clone(), device.clone(), queue.clone()),
+            cubemaps: Cache::new(store.cubemaps.clone(), device.clone(), queue.clone()),
             render_textures: Cache::new(
                 store.render_textures.clone(),
                 device.clone(),
@@ -43,6 +46,11 @@ impl AssetCache {
             ),
             render_texture_arrays: Cache::new(
                 store.render_texture_arrays.clone(),
+                device.clone(),
+                queue.clone(),
+            ),
+            render_cubemaps: Cache::new(
+                store.render_cubemaps.clone(),
                 device.clone(),
                 queue.clone(),
             ),
@@ -96,12 +104,20 @@ impl AssetCache {
         self.texture_arrays.try_get(handle, self)
     }
 
+    pub fn cubemap(&self, handle: HCubemap) -> Option<Arc<GpuTexture>> {
+        self.cubemaps.try_get(handle, self)
+    }
+
     pub fn render_texture(&self, handle: HRenderTexture2D) -> Option<Arc<GpuTexture>> {
         self.render_textures.try_get(handle, self)
     }
 
     pub fn render_texture_array(&self, handle: HRenderTexture2DArray) -> Option<Arc<GpuTexture>> {
         self.render_texture_arrays.try_get(handle, self)
+    }
+
+    pub fn render_cubemap(&self, handle: HRenderCubemap) -> Option<Arc<GpuTexture>> {
+        self.render_cubemaps.try_get(handle, self)
     }
 
     pub fn texture_fallback(&self) -> Arc<GpuTexture> {
@@ -176,6 +192,11 @@ impl AssetCache {
         refreshed_count += self.shaders.refresh_dirty();
         refreshed_count += self.materials.refresh_dirty();
         refreshed_count += self.textures.refresh_dirty();
+        refreshed_count += self.texture_arrays.refresh_dirty();
+        refreshed_count += self.cubemaps.refresh_dirty();
+        refreshed_count += self.render_textures.refresh_dirty();
+        refreshed_count += self.render_texture_arrays.refresh_dirty();
+        refreshed_count += self.render_cubemaps.refresh_dirty();
         refreshed_count += self.bgls.refresh_dirty();
 
         *self.last_refresh.lock().unwrap() = Instant::now();
@@ -218,6 +239,12 @@ impl AsRef<Store<Texture2DArray>> for AssetCache {
     }
 }
 
+impl AsRef<Store<Cubemap>> for AssetCache {
+    fn as_ref(&self) -> &Store<Cubemap> {
+        &self.store.cubemaps
+    }
+}
+
 impl AsRef<Store<RenderTexture2D>> for AssetCache {
     fn as_ref(&self) -> &Store<RenderTexture2D> {
         &self.store.render_textures
@@ -227,6 +254,12 @@ impl AsRef<Store<RenderTexture2D>> for AssetCache {
 impl AsRef<Store<RenderTexture2DArray>> for AssetCache {
     fn as_ref(&self) -> &Store<RenderTexture2DArray> {
         &self.store.render_texture_arrays
+    }
+}
+
+impl AsRef<Store<RenderCubemap>> for AssetCache {
+    fn as_ref(&self) -> &Store<RenderCubemap> {
+        &self.store.render_cubemaps
     }
 }
 
