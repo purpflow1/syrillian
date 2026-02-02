@@ -7,6 +7,7 @@ use syrillian::core::reflection::ReflectedField;
 use syrillian::core::reflection::{
     PartialReflect, ReflectedTypeActions, ReflectedTypeInfo, serialize_as,
 };
+use syrillian::math::vec3;
 use syrillian::rendering::CPUDrawCtx;
 use syrillian::rendering::lights::{Light, LightProxy, LightType};
 use syrillian::utils::FloatMathExt;
@@ -15,6 +16,7 @@ pub trait LightTypeTrait: Send + Sync {
     const NAME: &str;
     const FULL_NAME: &str;
     fn type_id() -> LightType;
+    fn reset(light: &mut LightProxy, inner_angle: &mut f32, outer_angle: &mut f32);
 }
 
 pub struct Point;
@@ -73,6 +75,15 @@ impl LightTypeTrait for Sun {
     fn type_id() -> LightType {
         LightType::Sun
     }
+
+    fn reset(light: &mut LightProxy, inner_angle: &mut f32, outer_angle: &mut f32) {
+        *inner_angle = 1.0;
+        *outer_angle = 1.0;
+        light.intensity = 1.0;
+        light.color = vec3(1.0, 0.95, 0.72);
+        light.inner_angle = *inner_angle;
+        light.outer_angle = *outer_angle;
+    }
 }
 
 impl LightTypeTrait for Point {
@@ -81,6 +92,14 @@ impl LightTypeTrait for Point {
 
     fn type_id() -> LightType {
         LightType::Point
+    }
+
+    fn reset(light: &mut LightProxy, inner_angle: &mut f32, outer_angle: &mut f32) {
+        *inner_angle = 1.0;
+        *outer_angle = 1.0;
+        light.intensity = 1.0;
+        light.inner_angle = *inner_angle;
+        light.outer_angle = *outer_angle;
     }
 }
 
@@ -91,27 +110,35 @@ impl LightTypeTrait for Spot {
     fn type_id() -> LightType {
         LightType::Spot
     }
+
+    fn reset(light: &mut LightProxy, inner_angle: &mut f32, outer_angle: &mut f32) {
+        *inner_angle = 5.0f32.to_radians();
+        *outer_angle = 30.0f32.to_radians();
+        light.inner_angle = 5.0f32.to_radians();
+        light.outer_angle = 30.0f32.to_radians();
+        light.range = 100.0;
+        light.intensity = 1000.0;
+    }
 }
 
 impl<L: LightTypeTrait + 'static> Default for LightComponent<L> {
     fn default() -> Self {
-        const DEFAULT_INNER_ANGLE: f32 = 5.0f32.to_radians();
-        const DEFAULT_OUTER_ANGLE: f32 = 30.0f32.to_radians();
-
         let mut local_proxy = LightProxy::dummy();
 
         let type_id = L::type_id();
+        let mut target_inner_angle = 1.0;
+        let mut target_outer_angle = 1.0;
+
         local_proxy.type_id = type_id as u32;
-        if type_id == LightType::Spot {
-            local_proxy.inner_angle = DEFAULT_INNER_ANGLE;
-            local_proxy.outer_angle = DEFAULT_OUTER_ANGLE;
-            local_proxy.range = 100.0;
-            local_proxy.intensity = 1000.0;
-        }
+        L::reset(
+            &mut local_proxy,
+            &mut target_inner_angle,
+            &mut target_outer_angle,
+        );
 
         LightComponent {
-            target_inner_angle: DEFAULT_INNER_ANGLE,
-            target_outer_angle: DEFAULT_OUTER_ANGLE,
+            target_inner_angle,
+            target_outer_angle,
             inner_angle_t: 1.0,
             outer_angle_t: 1.0,
             tween_enabled: false,
