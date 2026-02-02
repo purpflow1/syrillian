@@ -26,15 +26,30 @@ impl FrameCounter {
     }
 
     pub fn fps_mean(&self) -> u32 {
-        (1.0 / self.delta_mean()) as u32
+        let dt = self.delta_mean();
+        if dt < f32::EPSILON {
+            0
+        } else {
+            (1.0 / dt) as u32
+        }
     }
 
     pub fn fps_low(&self) -> u32 {
-        (1.0 / self.delta_high()) as u32
+        let dt = self.delta_high();
+        if dt < f32::EPSILON {
+            0
+        } else {
+            (1.0 / dt) as u32
+        }
     }
 
     pub fn fps_high(&self) -> u32 {
-        (1.0 / self.delta_low()) as u32
+        let dt = self.delta_low();
+        if dt < f32::EPSILON {
+            0
+        } else {
+            (1.0 / dt) as u32
+        }
     }
 
     pub fn delta_low(&self) -> f32 {
