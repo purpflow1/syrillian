@@ -19,14 +19,16 @@ impl<F: Into<f32>> Mul<F> for BoundingSphere {
     }
 }
 
-impl BoundingSphere {
-    pub fn empty() -> Self {
+impl Default for BoundingSphere {
+    fn default() -> Self {
         Self {
             center: Vec3::ZERO,
-            radius: 0.0,
+            radius: 1.0,
         }
     }
+}
 
+impl BoundingSphere {
     pub fn transformed(&self, transform: &Mat4) -> Self {
         let pos = transform * Vec4::new(self.center.x, self.center.y, self.center.z, 1.0);
         let w = if pos.w.abs() > f32::EPSILON {
@@ -46,5 +48,32 @@ impl BoundingSphere {
             center,
             radius: self.radius * scale,
         }
+    }
+
+    pub fn from_corners(corners: &[Vec3; 8]) -> Self {
+        let mut center = Vec3::ZERO;
+        let mut count = 0;
+        for corner in corners {
+            if corner.is_finite() {
+                center += corner;
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return BoundingSphere::default();
+        }
+        center /= count as f32;
+
+        let mut radius: f32 = 0.0;
+        for corner in corners {
+            if corner.is_finite() {
+                radius = radius.max((corner - center).length());
+            }
+        }
+        if !radius.is_finite() {
+            radius = 1.0;
+        }
+
+        Self { center, radius }
     }
 }

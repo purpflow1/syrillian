@@ -79,6 +79,46 @@ impl Frustum {
             .iter()
             .all(|p| p.distance_to(sphere) >= -sphere.radius)
     }
+
+    pub fn corners(&self) -> [Vec3; 8] {
+        let left = self.side(FrustumSide::Left);
+        let right = self.side(FrustumSide::Right);
+        let bottom = self.side(FrustumSide::Bottom);
+        let top = self.side(FrustumSide::Top);
+        let near = self.side(FrustumSide::Near);
+        let far = self.side(FrustumSide::Far);
+
+        [
+            Self::intersect_planes(near, left, bottom),
+            Self::intersect_planes(near, left, top),
+            Self::intersect_planes(near, right, bottom),
+            Self::intersect_planes(near, right, top),
+            Self::intersect_planes(far, left, bottom),
+            Self::intersect_planes(far, left, top),
+            Self::intersect_planes(far, right, bottom),
+            Self::intersect_planes(far, right, top),
+        ]
+    }
+
+    pub fn bounding_sphere(&self) -> BoundingSphere {
+        BoundingSphere::from_corners(&self.corners())
+    }
+
+    fn intersect_planes(p1: &FrustumPlane, p2: &FrustumPlane, p3: &FrustumPlane) -> Vec3 {
+        let n1 = p1.normal;
+        let n2 = p2.normal;
+        let n3 = p3.normal;
+
+        let denom = n1.dot(n2.cross(n3));
+        if denom.abs() <= 1e-6 || !denom.is_finite() {
+            return Vec3::splat(f32::NAN);
+        }
+
+        let term1 = (-p1.d) * n2.cross(n3);
+        let term2 = (-p2.d) * n3.cross(n1);
+        let term3 = (-p3.d) * n1.cross(n2);
+        (term1 + term2 + term3) / denom
+    }
 }
 
 #[cfg(test)]

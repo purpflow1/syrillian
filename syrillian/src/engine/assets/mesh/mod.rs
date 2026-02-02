@@ -206,7 +206,7 @@ impl StoreType for Mesh {
 
 pub(crate) fn bounding_sphere_from_vertices(vertices: &[Vertex3D]) -> BoundingSphere {
     if vertices.is_empty() {
-        return BoundingSphere::empty();
+        return BoundingSphere::default();
     }
 
     let mut min = vertices[0].position;
