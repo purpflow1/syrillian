@@ -369,7 +369,7 @@ fn eval_sun(
     _in_pos: vec3<f32>, N: vec3<f32>, V: vec3<f32>,
     base: vec3<f32>, metallic: f32, roughness: f32, light: Light
 ) -> vec3<f32> {
-    let L = safe_normalize(light.direction);
+    let L = safe_normalize(-light.direction);
     let brdf = brdf_term(N, V, L, base, metallic, roughness);
     let radiance = light.color * light.intensity;
     return brdf * radiance;
@@ -427,7 +427,9 @@ fn fs_main_3d(in: FInput) -> FOutput {
 
     // Lights
     let count = light_count;
-    for (var i: u32 = 0u; i < count; i = i + 1u) {
+    const MAX_LIGHTS: u32 = 64u;
+    let clamped = min(count, MAX_LIGHTS);
+    for (var i: u32 = 0u; i < clamped; i = i + 1u) {
         let Ld = lights[i];
         if (Ld.type_id == LIGHT_TYPE_POINT) {
             Lo += eval_point(in.position, N, V, base, metallic, roughness, Ld);
