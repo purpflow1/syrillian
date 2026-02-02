@@ -26,7 +26,7 @@ use syrillian::strobe::TextAlignment;
 use syrillian::tracing::{error, info};
 use syrillian::utils::FrameCounter;
 use syrillian::{AppRuntime, AppState, World};
-use syrillian_components::prefabs::{CubePrefab, FirstPersonPlayerPrefab};
+use syrillian_components::prefabs::{CubePrefab, FirstPersonPlayerPrefab, SunPrefab};
 use syrillian_components::{
     AudioEmitter, Collider3D, FirstPersonCameraController, FlashlightComponent, FreecamController,
     PointLightComponent, Profiler, RigidBodyComponent, RopeJoint, RotateComponent,
@@ -606,6 +606,8 @@ impl Prefab for City {
     fn build(&self, world: &mut World) -> GameObjectId {
         let testmap = include_bytes!("../../syrillian/testmodels/testmap/testmap.glb");
         let mut city = SceneLoader::load_buffer(world, testmap).expect("Failed to load city file");
+
+        world.spawn(&SunPrefab);
 
         // add colliders to city
         city.add_child_components_then(Collider3D::please_use_mesh);
