@@ -262,10 +262,6 @@ impl MyMain {
 
         big_cube_left.at(100.0, 10.0, 200.0).scale(100.);
         big_cube_right.at(-100.0, 10.0, 200.0).scale(100.);
-
-        let mut fancy_cube =
-            SceneLoader::load(world, "syrillian_examples/examples/assets/fancy_cube.glb").unwrap();
-        fancy_cube.at(-20.0, 2.0, -5.0);
     }
 
     fn setup_audio_demo(
