@@ -3618,8 +3618,6 @@ dependencies = [
  "delegate",
  "itertools",
  "kira",
- "more-asserts",
- "num-traits",
  "snafu",
  "syrillian",
 ]
