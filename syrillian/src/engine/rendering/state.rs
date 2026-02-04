@@ -44,7 +44,11 @@ pub struct State {
 impl State {
     fn setup_instance() -> Instance {
         let mut desc = InstanceDescriptor::from_env_or_default();
-        desc.backends ^= Backends::VULKAN;
+
+        if !cfg!(target_os = "linux") {
+            desc.backends ^= Backends::VULKAN;
+        }
+
         Instance::new(&desc)
         // Instance::new(&InstanceDescriptor {
         //     backends: Backends::DX12,
