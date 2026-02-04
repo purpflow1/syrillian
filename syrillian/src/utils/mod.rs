@@ -8,6 +8,7 @@ pub(crate) mod hacks;
 pub mod iter;
 pub mod math;
 pub mod sizes;
+pub mod str;
 
 pub use buffer::*;
 pub use checks::*;

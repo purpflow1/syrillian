@@ -93,10 +93,14 @@ impl UiImage {
         );
 
         let mut pass = ctx.pass().write().unwrap();
-        if !shader.activate(&mut pass, ctx.gpu_ctx()) {
-            return;
-        }
+        crate::must_pipeline!(pipeline = shader, ctx.gpu_ctx().pass_type => return);
 
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(
+            shader.bind_groups().render,
+            ctx.gpu_ctx().render_bind_group,
+            &[],
+        );
         if let Some(idx) = shader.bind_groups().model {
             pass.set_bind_group(idx, cached_image.uniform.bind_group(), &[]);
         }

@@ -4,10 +4,13 @@
 //! depth textures. It also exposes methods to resize and recreate these
 //! resources when the window changes.
 
+use crate::utils::str::first_backend_to_str;
 use futures::executor::block_on;
 use snafu::{ResultExt, Snafu, ensure};
 use std::mem;
 use std::sync::Arc;
+use syrillian_utils::EngineArgs;
+use tracing::{debug, info, trace, warn};
 use wgpu::{
     Adapter, Backends, CreateSurfaceError, Device, DeviceDescriptor, ExperimentalFeatures,
     Features, Instance, InstanceDescriptor, Limits, MemoryHints, PowerPreference, Queue,
@@ -15,6 +18,13 @@ use wgpu::{
 };
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
+
+const DEFAULT_BACKENDS: &[Backends] = &[
+    Backends::DX12,
+    Backends::METAL,
+    Backends::VULKAN,
+    Backends::GL,
+];
 
 type Result<T, E = StateError> = std::result::Result<T, E>;
 
@@ -42,20 +52,46 @@ pub struct State {
 }
 
 impl State {
-    fn setup_instance() -> Instance {
+    // will respect the order of backends passed instead of a plain `Backends`
+    fn try_setup_instance_with<'a>(
+        window: &'a Window,
+        backends: &[Backends],
+    ) -> Result<(Instance, Surface<'a>)> {
+        for backend in backends {
+            let mut desc = InstanceDescriptor::from_env_or_default();
+
+            desc.backends = *backend;
+
+            let instance = Instance::new(&desc);
+            let surface = instance.create_surface(window).context(CreateSurfaceErr);
+            if let Ok(surface) = surface {
+                info!("Selected backend: {}", first_backend_to_str(*backend));
+                return Ok((instance, surface));
+            } else {
+                debug!(
+                    "Failed to start on backend: {}",
+                    first_backend_to_str(*backend)
+                );
+            }
+        }
+
+        warn!(
+            "Couldn't start on any selected graphics backend. Retrying with all available backends"
+        );
+
+        Self::setup_instance(window)
+    }
+
+    fn setup_instance<'a>(window: &'a Window) -> Result<(Instance, Surface<'a>)> {
         let mut desc = InstanceDescriptor::from_env_or_default();
 
         if !cfg!(target_os = "linux") {
             desc.backends ^= Backends::VULKAN;
         }
 
-        Instance::new(&desc)
-        // Instance::new(&InstanceDescriptor {
-        //     backends: Backends::DX12,
-        //     flags: Default::default(),
-        //     memory_budget_thresholds: Default::default(),
-        //     backend_options: Default::default(),
-        // })
+        let instance = Instance::new(&desc);
+        let surface = instance.create_surface(window).context(CreateSurfaceErr)?;
+        Ok((instance, surface))
     }
 
     async fn setup_adapter(instance: &Instance, surface: Option<&Surface<'static>>) -> Adapter {
@@ -137,6 +173,8 @@ impl State {
         let format = Self::preferred_surface_format(&caps.formats)?;
         let size = Self::clamp_size(size);
 
+        let max_frame_latency = EngineArgs::get().max_frames_in_flight.unwrap_or(1);
+
         Ok(SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
             format,
@@ -153,7 +191,7 @@ impl State {
                 .copied()
                 .unwrap_or(wgpu::CompositeAlphaMode::Auto),
             view_formats: vec![],
-            desired_maximum_frame_latency: 1,
+            desired_maximum_frame_latency: max_frame_latency,
         })
     }
 
@@ -168,8 +206,15 @@ impl State {
     }
 
     pub fn new(window: &Window) -> Result<(Self, Surface<'static>, SurfaceConfiguration)> {
-        let instance = Self::setup_instance();
-        let surface = instance.create_surface(window).context(CreateSurfaceErr)?;
+        let backends = EngineArgs::get()
+            .force_backend
+            .as_ref()
+            .and_then(|o| o.as_deref())
+            .unwrap_or(DEFAULT_BACKENDS);
+
+        trace!("Starting with backends: {:?}", backends);
+
+        let (instance, surface) = Self::try_setup_instance_with(window, backends)?;
         // SAFETY: The surface stores the window handle internally and the caller owns the window.
         let surface = unsafe { mem::transmute::<Surface<'_>, Surface<'static>>(surface) };
         let adapter = block_on(Self::setup_adapter(&instance, Some(&surface)));

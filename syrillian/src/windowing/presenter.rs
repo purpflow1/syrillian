@@ -186,7 +186,7 @@ impl Presenter {
 
         encoder.copy_texture_to_texture(
             TexelCopyTextureInfo {
-                texture: &frame.texture,
+                texture: &frame.frame,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
                 aspect: TextureAspect::All,

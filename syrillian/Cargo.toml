@@ -109,3 +109,4 @@ wasm-bindgen-test = "0.3"
 default = ["derive", "audio"]
 derive = ["syrillian_macros/derive_tracing_subscriber"]
 audio = ["kira/cpal"]
+physics_profiler = ["rapier3d/profiler"]

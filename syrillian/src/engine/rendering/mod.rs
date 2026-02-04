@@ -47,6 +47,7 @@ pub mod debug_renderer;
 pub mod frustum;
 pub mod post_process;
 pub mod strobe;
+pub mod viewport;
 
 pub use cache::*;
 pub use context::*;

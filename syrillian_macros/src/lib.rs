@@ -93,7 +93,8 @@ pub fn syrillian_app(input: TokenStream) -> TokenStream {
 
     quote! {
         fn main() {
-            let app = <#app_name as ::syrillian::AppRuntime>::configure(stringify!(#app_name), 800, 600);
+            let default_size = ::syrillian::utils::EngineArgs::default_window_size();
+            let app = <#app_name as ::syrillian::AppRuntime>::configure(stringify!(#app_name), default_size.x, default_size.y);
 
             #logger
 

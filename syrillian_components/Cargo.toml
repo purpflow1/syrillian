@@ -22,3 +22,4 @@ more-asserts = "0.3"
 [features]
 default = ["audio"]
 audio = ["kira/cpal"]
+physics_profiler = ["syrillian/physics_profiler"]

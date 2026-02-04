@@ -6,7 +6,6 @@ use crate::rendering::proxies::{MeshUniformIndex, TextImmediates};
 use crate::rendering::{RenderPassType, hash_to_rgba};
 use crate::strobe::UiDrawContext;
 use crate::strobe::ui_element::{Rect, UiElement};
-use crate::try_activate_shader;
 use crate::utils::hsv_to_rgb;
 use wgpu::BufferUsages;
 use wgpu::util::DeviceExt;
@@ -202,7 +201,14 @@ impl UiText {
         }
 
         let mut pass = ctx.gpu_ctx().pass.write().unwrap();
-        try_activate_shader!(shader, &mut pass, ctx.gpu_ctx() => return);
+        crate::must_pipeline!(pipeline = shader, ctx.gpu_ctx().pass_type => return);
+
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(
+            shader.bind_groups().render,
+            ctx.gpu_ctx().render_bind_group,
+            &[],
+        );
 
         let groups = shader.bind_groups();
         if let Some(idx) = groups.model {

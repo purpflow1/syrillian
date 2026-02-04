@@ -11,6 +11,7 @@ use rapier3d::math::{Pose, Vector};
 use rapier3d::parry::query::{DefaultQueryDispatcher, ShapeCastOptions};
 use rapier3d::pipeline::{PhysicsPipeline, QueryFilter};
 use syrillian_macros::Reflect;
+use syrillian_utils::EngineArgs;
 use web_time::{Duration, Instant};
 
 #[derive(Reflect)]
@@ -48,11 +49,19 @@ const EARTH_GRAVITY: f32 = 9.81;
 
 impl Default for PhysicsSimulation {
     fn default() -> Self {
+        let timesteps_per_sec = EngineArgs::get().physics_timestep.unwrap_or(60.0);
+        let timestep = Duration::from_secs_f64(1.0 / timesteps_per_sec);
+        let integration = IntegrationParameters {
+            dt: timestep.as_secs_f32(),
+            min_ccd_dt: timestep.as_secs_f32() / 100.0,
+            ..Default::default()
+        };
+
         PhysicsSimulation {
             gravity: Vector::new(0.0, -EARTH_GRAVITY, 0.0),
             rigid_body_set: RigidBodySet::default(),
             collider_set: ColliderSet::default(),
-            integration_parameters: IntegrationParameters::default(),
+            integration_parameters: integration,
             physics_pipeline: PhysicsPipeline::default(),
             island_manager: IslandManager::default(),
             broad_phase: DefaultBroadPhase::default(),
@@ -63,7 +72,7 @@ impl Default for PhysicsSimulation {
             physics_hooks: (),
             event_handler: (),
             current_timepoint: Instant::now(),
-            timestep: Duration::from_secs_f64(1.0 / 60.0),
+            timestep,
             alpha: 0.0,
             is_shutting_down: false,
         }

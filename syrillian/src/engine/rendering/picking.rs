@@ -1,5 +1,10 @@
 use crate::ViewportId;
 use crate::core::ObjectHash;
+use crate::rendering::PICKING_TEXTURE_FORMAT;
+use wgpu::{
+    Device, Extent3d, SurfaceConfiguration, Texture, TextureDescriptor, TextureDimension,
+    TextureUsages, TextureView, TextureViewDescriptor,
+};
 
 #[derive(Debug, Clone)]
 pub struct PickRequest {
@@ -13,6 +18,45 @@ pub struct PickResult {
     pub id: u64,
     pub target: ViewportId,
     pub hash: Option<ObjectHash>,
+}
+
+pub(super) struct PickingSurface {
+    texture: Texture,
+    view: TextureView,
+}
+
+impl PickingSurface {
+    pub fn new(device: &Device, config: &SurfaceConfiguration) -> Self {
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("Picking Texture"),
+            size: Extent3d {
+                width: config.width.max(1),
+                height: config.height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: PICKING_TEXTURE_FORMAT,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&TextureViewDescriptor::default());
+
+        Self { texture, view }
+    }
+
+    pub fn recreate(&mut self, device: &Device, config: &SurfaceConfiguration) {
+        *self = Self::new(device, config);
+    }
+
+    pub fn view(&self) -> &TextureView {
+        &self.view
+    }
+
+    pub fn texture(&self) -> &Texture {
+        &self.texture
+    }
 }
 
 pub fn hash_to_rgba_bytes(hash: ObjectHash) -> [u8; 4] {

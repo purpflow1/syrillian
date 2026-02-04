@@ -4,7 +4,6 @@ use crate::math::{Vec2, Vec4};
 use crate::rendering::{RenderPassType, hash_to_rgba};
 use crate::strobe::UiDrawContext;
 use crate::strobe::ui_element::{Rect, UiElement};
-use crate::try_activate_shader;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -89,7 +88,14 @@ impl UiElement for UiLine {
         }
 
         let mut pass = ctx.gpu_ctx().pass.write().unwrap();
-        try_activate_shader!(shader, &mut pass, ctx.gpu_ctx() => return);
+        crate::must_pipeline!(pipeline = shader, ctx.gpu_ctx().pass_type => return);
+
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(
+            shader.bind_groups().render,
+            ctx.gpu_ctx().render_bind_group,
+            &[],
+        );
 
         pass.set_immediates(0, bytemuck::bytes_of(&pc));
         pass.draw(0..6, 0..1);

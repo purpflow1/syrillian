@@ -11,9 +11,7 @@ use crate::core::ObjectHash;
 use crate::engine::assets::{AssetStore, HTexture2D};
 use crate::engine::rendering::FrameCtx;
 use crate::engine::rendering::cache::{AssetCache, GpuTexture};
-use crate::engine::rendering::offscreen_surface::OffscreenSurface;
-use crate::engine::rendering::post_process_pass::PostProcessData;
-use crate::math::{Affine3A, UVec2};
+use crate::math::Affine3A;
 #[cfg(debug_assertions)]
 use crate::rendering::DebugRenderer;
 use crate::rendering::light_manager::LightManager;
@@ -24,9 +22,11 @@ use crate::rendering::proxies::{SceneProxy, SceneProxyBinding};
 use crate::rendering::render_data::{CameraUniform, RenderUniformData};
 use crate::rendering::strobe::StrobeRenderer;
 use crate::rendering::texture_export::{TextureExportError, save_texture_to_png};
+use crate::rendering::viewport::RenderViewport;
 use crate::rendering::{
     Frustum, FrustumSide, GPUDrawCtx, ProxyUpdateCommand, RenderPassType, State,
 };
+use crate::strobe::UiGPUContext;
 use crossbeam_channel::Sender;
 use itertools::Itertools;
 use std::cell::RefCell;
@@ -34,9 +34,9 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::mem;
 use std::sync::{Arc, RwLock};
-use syrillian_utils::debug_panic;
+use syrillian_utils::{EngineArgs, debug_panic};
 use tracing::{instrument, trace, warn};
-use web_time::{Duration, Instant};
+use web_time::Instant;
 use wgpu::*;
 use winit::dpi::PhysicalSize;
 
@@ -45,269 +45,9 @@ const PICKING_ROW_PITCH: u32 = 256;
 
 pub struct RenderedFrame {
     pub target: ViewportId,
-    pub texture: Texture,
+    pub frame: Texture,
     pub size: PhysicalSize<u32>,
     pub format: TextureFormat,
-}
-
-struct PickingSurface {
-    texture: Texture,
-    view: TextureView,
-}
-
-impl PickingSurface {
-    fn new(device: &Device, config: &SurfaceConfiguration) -> Self {
-        let texture = device.create_texture(&TextureDescriptor {
-            label: Some("Picking Texture"),
-            size: Extent3d {
-                width: config.width.max(1),
-                height: config.height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: PICKING_TEXTURE_FORMAT,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&TextureViewDescriptor::default());
-
-        Self { texture, view }
-    }
-
-    fn recreate(&mut self, device: &Device, config: &SurfaceConfiguration) {
-        *self = Self::new(device, config);
-    }
-
-    fn view(&self) -> &TextureView {
-        &self.view
-    }
-
-    fn texture(&self) -> &Texture {
-        &self.texture
-    }
-}
-
-pub struct RenderViewport {
-    config: SurfaceConfiguration,
-    depth_texture: Texture,
-    offscreen_surface: OffscreenSurface,
-    ssr_surface: OffscreenSurface,
-    final_surfaces: [OffscreenSurface; 2],
-    picking_surface: PickingSurface,
-    post_process_ssr: PostProcessData,
-    post_process_final: PostProcessData,
-    g_normal: Texture,
-    g_material: Texture,
-    render_data: RenderUniformData,
-    start_time: Instant,
-    delta_time: Duration,
-    last_frame_time: Instant,
-    frame_count: usize,
-}
-
-impl RenderViewport {
-    fn new(mut config: SurfaceConfiguration, state: &State, cache: &AssetCache) -> Self {
-        Self::clamp_config(&mut config);
-
-        let render_bgl = cache.bgl_render();
-        let pp_bgl = cache.bgl_post_process();
-
-        let picking_surface = PickingSurface::new(&state.device, &config);
-        let offscreen_surface = OffscreenSurface::new(&state.device, &config);
-        let ssr_surface = OffscreenSurface::new(&state.device, &config);
-        let final_surfaces = [
-            OffscreenSurface::new(&state.device, &config),
-            OffscreenSurface::new(&state.device, &config),
-        ];
-        let depth_texture = Self::create_depth_texture(&state.device, &config);
-        let normal_texture = Self::create_g_buffer("GBuffer (Normals)", &state.device, &config);
-        let material_texture = Self::create_material_texture(&state.device, &config);
-        let post_process_ssr = PostProcessData::new(
-            &state.device,
-            (*pp_bgl).clone(),
-            offscreen_surface.view().clone(),
-            depth_texture.create_view(&TextureViewDescriptor::default()),
-            normal_texture.create_view(&TextureViewDescriptor::default()),
-            material_texture.create_view(&TextureViewDescriptor::default()),
-        );
-        let post_process_final = PostProcessData::new(
-            &state.device,
-            (*pp_bgl).clone(),
-            ssr_surface.view().clone(),
-            depth_texture.create_view(&TextureViewDescriptor::default()),
-            normal_texture.create_view(&TextureViewDescriptor::default()),
-            material_texture.create_view(&TextureViewDescriptor::default()),
-        );
-
-        let render_data = RenderUniformData::empty(&state.device, &render_bgl);
-
-        RenderViewport {
-            config,
-            depth_texture,
-            offscreen_surface,
-            ssr_surface,
-            final_surfaces,
-            picking_surface,
-            post_process_ssr,
-            post_process_final,
-            g_normal: normal_texture,
-            g_material: material_texture,
-            render_data,
-            start_time: Instant::now(),
-            delta_time: Duration::default(),
-            last_frame_time: Instant::now(),
-            frame_count: 0,
-        }
-    }
-
-    fn clamp_config(config: &mut SurfaceConfiguration) {
-        config.width = config.width.max(1);
-        config.height = config.height.max(1);
-    }
-
-    #[instrument(skip_all)]
-    #[profiling::function]
-    fn resize(&mut self, mut config: SurfaceConfiguration, state: &State, cache: &AssetCache) {
-        Self::clamp_config(&mut config);
-        self.config = config;
-
-        self.offscreen_surface.recreate(&state.device, &self.config);
-        self.ssr_surface.recreate(&state.device, &self.config);
-        self.final_surfaces[0].recreate(&state.device, &self.config);
-        self.final_surfaces[1].recreate(&state.device, &self.config);
-        self.depth_texture = Self::create_depth_texture(&state.device, &self.config);
-        self.g_normal = Self::create_g_buffer("GBuffer (Normals)", &state.device, &self.config);
-        self.g_material = Self::create_material_texture(&state.device, &self.config);
-        self.picking_surface.recreate(&state.device, &self.config);
-        let pp_bgl = cache.bgl_post_process();
-        self.post_process_ssr = PostProcessData::new(
-            &state.device,
-            (*pp_bgl).clone(),
-            self.offscreen_surface.view().clone(),
-            self.depth_texture
-                .create_view(&TextureViewDescriptor::default()),
-            self.g_normal.create_view(&TextureViewDescriptor::default()),
-            self.g_material
-                .create_view(&TextureViewDescriptor::default()),
-        );
-        self.post_process_final = PostProcessData::new(
-            &state.device,
-            (*pp_bgl).clone(),
-            self.ssr_surface.view().clone(),
-            self.depth_texture
-                .create_view(&TextureViewDescriptor::default()),
-            self.g_normal.create_view(&TextureViewDescriptor::default()),
-            self.g_material
-                .create_view(&TextureViewDescriptor::default()),
-        );
-    }
-
-    fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> Texture {
-        device.create_texture(&TextureDescriptor {
-            label: Some("Depth Texture"),
-            size: Extent3d {
-                width: config.width.max(1),
-                height: config.height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Depth32Float,
-            usage: TextureUsages::COPY_SRC
-                | TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        })
-    }
-
-    fn create_g_buffer(
-        which: &'static str,
-        device: &Device,
-        config: &SurfaceConfiguration,
-    ) -> Texture {
-        device.create_texture(&TextureDescriptor {
-            label: Some(which),
-            size: Extent3d {
-                width: config.width.max(1),
-                height: config.height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rg16Float,
-            usage: TextureUsages::COPY_SRC
-                | TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        })
-    }
-
-    fn create_material_texture(device: &Device, config: &SurfaceConfiguration) -> Texture {
-        device.create_texture(&TextureDescriptor {
-            label: Some("Material Property Texture"),
-            size: Extent3d {
-                width: config.width.max(1),
-                height: config.height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Bgra8Unorm,
-            usage: TextureUsages::COPY_SRC
-                | TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        })
-    }
-
-    #[instrument(skip_all)]
-    #[profiling::function]
-    fn begin_render(&mut self) -> FrameCtx {
-        self.frame_count += 1;
-
-        let depth_view = self
-            .depth_texture
-            .create_view(&TextureViewDescriptor::default());
-
-        FrameCtx { depth_view }
-    }
-
-    fn update_render_data(&mut self, queue: &Queue) {
-        self.update_system_data(queue);
-    }
-
-    fn update_view_camera_data(&mut self, queue: &Queue) {
-        self.render_data.upload_camera_data(queue);
-    }
-
-    fn update_system_data(&mut self, queue: &Queue) {
-        let window_size = UVec2::new(self.config.width.max(1), self.config.height.max(1));
-
-        let system_data = &mut self.render_data.system_data;
-        system_data.screen_size = window_size;
-        system_data.time = self.start_time.elapsed().as_secs_f32();
-        system_data.delta_time = self.delta_time.as_secs_f32();
-
-        self.render_data.upload_system_data(queue);
-    }
-
-    /// Updates the delta time based on the elapsed time since the last frame
-    fn tick_delta_time(&mut self) {
-        self.delta_time = self.last_frame_time.elapsed();
-        self.last_frame_time = Instant::now();
-    }
-
-    fn size(&self) -> PhysicalSize<u32> {
-        PhysicalSize {
-            width: self.config.width,
-            height: self.config.height,
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -338,7 +78,12 @@ impl Renderer {
         let mut viewports = HashMap::new();
         viewports.insert(
             ViewportId::PRIMARY,
-            RenderViewport::new(primary_config, state.as_ref(), &cache),
+            RenderViewport::new(
+                ViewportId::PRIMARY,
+                primary_config,
+                state.device.as_ref(),
+                &cache,
+            ),
         );
 
         Ok(Renderer {
@@ -385,28 +130,28 @@ impl Renderer {
         save_texture_to_png(
             &self.state.device,
             &self.state.queue,
-            &viewport.g_normal,
+            &viewport.render_pipeline.g_normal,
             path.join("g_normal.png"),
         )?;
 
         save_texture_to_png(
             &self.state.device,
             &self.state.queue,
-            &viewport.g_material,
+            &viewport.render_pipeline.g_material,
             path.join("g_material.png"),
         )?;
 
         save_texture_to_png(
             &self.state.device,
             &self.state.queue,
-            &viewport.depth_texture,
+            &viewport.render_pipeline.depth_texture,
             path.join("offscreen_depth.png"),
         )?;
 
         save_texture_to_png(
             &self.state.device,
             &self.state.queue,
-            viewport.offscreen_surface.texture(),
+            viewport.render_pipeline.offscreen_surface.texture(),
             path.join("offscreen_surface.png"),
         )
     }
@@ -466,7 +211,7 @@ impl Renderer {
             return false;
         };
 
-        viewport.resize(config, &self.state, &self.cache);
+        viewport.resize(config, self.state.device.as_ref(), &self.cache);
 
         true
     }
@@ -494,21 +239,15 @@ impl Renderer {
     fn sorted_proxies(&self, camera_data: &CameraUniform) -> Vec<TypedComponentId> {
         let frustum = camera_data.frustum();
 
-        // FIXME: Sorting is bound to primary viewport. Transparent objects probably wont render
-        //        right on other windows
         sorted_enabled_proxy_ids(&self.proxies, self.cache.store(), Some(&frustum))
     }
 
     #[instrument(skip_all)]
     #[profiling::function]
-    fn render_frame_inner(
-        &mut self,
-        target_id: ViewportId,
-        viewport: &mut RenderViewport,
-    ) -> RenderedFrame {
+    fn render_frame_inner(&mut self, viewport: &mut RenderViewport) -> RenderedFrame {
         let mut ctx = viewport.begin_render();
 
-        self.render(target_id, viewport, &mut ctx);
+        self.render(viewport, &mut ctx);
 
         if self.cache.last_refresh().elapsed().as_secs_f32() > 5.0 {
             trace!("Refreshing cache...");
@@ -518,33 +257,13 @@ impl Renderer {
             }
         }
 
-        self.finish_frame(target_id, viewport)
+        self.finalize_frame(viewport)
     }
 
     #[instrument(skip_all)]
-    pub fn render_frame(
-        &mut self,
-        target_id: ViewportId,
-        viewport: &mut RenderViewport,
-    ) -> RenderedFrame {
+    pub fn render_frame(&mut self, viewport: &mut RenderViewport) -> RenderedFrame {
         viewport.tick_delta_time();
-        self.render_frame_inner(target_id, viewport)
-    }
-
-    pub fn finish_frame(
-        &mut self,
-        target_id: ViewportId,
-        viewport: &mut RenderViewport,
-    ) -> RenderedFrame {
-        let final_color = &viewport.final_surfaces[viewport.frame_count % 2];
-        self.render_final_pass(viewport, final_color.view());
-
-        RenderedFrame {
-            target: target_id,
-            texture: final_color.texture().clone(),
-            size: viewport.size(),
-            format: viewport.config.format,
-        }
+        self.render_frame_inner(viewport)
     }
 
     #[profiling::function]
@@ -552,8 +271,8 @@ impl Renderer {
         let mut targets = mem::take(&mut self.viewports);
         let mut frames = Vec::with_capacity(targets.len());
 
-        for (id, target) in &mut targets {
-            let frame = self.render_frame(*id, target);
+        for target in targets.values_mut() {
+            let frame = self.render_frame(target);
             frames.push(frame);
         }
 
@@ -632,25 +351,14 @@ impl Renderer {
                 ..RenderPassDescriptor::default()
             });
 
-            let draw_ctx = GPUDrawCtx {
-                frame: ctx,
+            let draw_ctx = UiGPUContext {
                 pass: RwLock::new(pass),
                 pass_type: RenderPassType::PickingUi,
                 render_bind_group: viewport.render_data.uniform.bind_group(),
-                light_bind_group: self.lights.uniform().bind_group(),
-                shadow_bind_group: self.lights.placeholder_shadow_uniform().bind_group(),
-                transparency_pass: false,
             };
             let mut strobe = self.strobe.borrow_mut();
 
-            strobe.render(
-                &draw_ctx,
-                &self.cache,
-                &self.state,
-                request.target,
-                self.start_time,
-                viewport.size(),
-            );
+            strobe.render(&draw_ctx, &self.cache, &self.state, viewport);
         }
 
         let read_buffer = self.state.device.create_buffer(&BufferDescriptor {
@@ -723,15 +431,19 @@ impl Renderer {
     }
 
     #[instrument(skip_all)]
-    fn render(&mut self, target_id: ViewportId, viewport: &RenderViewport, ctx: &mut FrameCtx) {
+    fn render(&mut self, viewport: &RenderViewport, ctx: &mut FrameCtx) {
         let main_sorted_proxies = self.sorted_proxies(&viewport.render_data.camera_data);
 
-        if let Some(request) = self.take_pick_request(target_id) {
+        if let Some(request) = self.take_pick_request(viewport.id) {
             self.picking_pass(viewport, ctx, request, &main_sorted_proxies);
         }
 
-        self.shadow_pass(ctx);
-        self.main_pass(target_id, viewport, ctx, &main_sorted_proxies);
+        if !EngineArgs::get().no_shadows {
+            // TODO: Make sure to switch to dynamically generated shaders that dont incorporate shadows automatically
+            self.shadow_pass(ctx);
+        }
+
+        self.main_pass(viewport, ctx, &main_sorted_proxies);
     }
 
     #[instrument(skip_all)]
@@ -826,7 +538,6 @@ impl Renderer {
     #[instrument(skip_all)]
     fn main_pass(
         &mut self,
-        target_id: ViewportId,
         viewport: &RenderViewport,
         ctx: &mut FrameCtx,
         sorted_proxies: &[TypedComponentId],
@@ -847,30 +558,6 @@ impl Renderer {
                 RenderPassType::Color,
                 sorted_proxies,
                 &viewport.render_data,
-            );
-        }
-
-        let has_ui_draws_queued = self.strobe.borrow().has_draws(target_id);
-        if has_ui_draws_queued {
-            let pass = self.prepare_ui_render_pass(&mut encoder, viewport, ctx);
-
-            let draw_ctx = GPUDrawCtx {
-                frame: ctx,
-                pass: RwLock::new(pass),
-                pass_type: RenderPassType::Color2D,
-                render_bind_group: viewport.render_data.uniform.bind_group(),
-                light_bind_group: self.lights.uniform().bind_group(),
-                shadow_bind_group: self.lights.placeholder_shadow_uniform().bind_group(),
-                transparency_pass: false,
-            };
-
-            self.strobe.borrow_mut().render(
-                &draw_ctx,
-                &self.cache,
-                &self.state,
-                target_id,
-                self.start_time,
-                viewport.size(),
             );
         }
 
@@ -948,74 +635,35 @@ impl Renderer {
 
     #[instrument(skip_all)]
     #[profiling::function]
-    fn render_final_pass(&mut self, viewport: &RenderViewport, color_view: &TextureView) {
+    fn finalize_frame(&mut self, viewport: &RenderViewport) -> RenderedFrame {
         let mut encoder = self
             .state
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("Final Pass Copy Encoder"),
             });
-        {
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("SSR Post Process Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: viewport.ssr_surface.view(),
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                ..RenderPassDescriptor::default()
-            });
 
-            let ssr_shader = self.cache.shader_post_process_ssr();
-            let groups = ssr_shader.bind_groups();
-            pass.set_pipeline(ssr_shader.solid_pipeline());
-            pass.set_bind_group(
-                groups.render,
-                viewport.render_data.uniform.bind_group(),
-                &[],
-            );
-            if let Some(idx) = groups.post_process {
-                pass.set_bind_group(idx, viewport.post_process_ssr.uniform.bind_group(), &[]);
-            }
-            pass.draw(0..6, 0..1);
-        }
+        viewport.render_pipeline.render_post_process(
+            &viewport.render_data,
+            &mut encoder,
+            &self.cache,
+        );
 
-        {
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Post Process Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: color_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                ..RenderPassDescriptor::default()
-            });
+        let frame = viewport
+            .render_pipeline
+            .finalize_frame(&mut encoder, viewport, &self.cache);
 
-            let post_shader = self.cache.shader_post_process();
-            let groups = post_shader.bind_groups();
-            pass.set_pipeline(post_shader.solid_pipeline());
-            pass.set_bind_group(
-                groups.render,
-                viewport.render_data.uniform.bind_group(),
-                &[],
-            );
-            if let Some(idx) = groups.post_process {
-                pass.set_bind_group(idx, viewport.post_process_final.uniform.bind_group(), &[]);
-            }
-            pass.draw(0..6, 0..1);
-        }
+        viewport.render_pipeline.render_ui_onto_final_frame(
+            &mut encoder,
+            &mut self.strobe.borrow_mut(),
+            viewport,
+            &self.cache,
+            &self.state,
+        );
 
         self.state.queue.submit(Some(encoder.finish()));
+
+        frame
     }
 
     #[instrument(skip_all)]
@@ -1121,7 +769,7 @@ impl Renderer {
             return Ok(());
         }
 
-        let viewport = RenderViewport::new(config, &self.state, &self.cache);
+        let viewport = RenderViewport::new(target_id, config, &self.state.device, &self.cache);
         self.viewports.insert(target_id, viewport);
 
         Ok(())
@@ -1159,17 +807,20 @@ impl Renderer {
         viewport: &RenderViewport,
         ctx: &mut FrameCtx,
     ) -> RenderPass<'a> {
+        let color_view = viewport.render_pipeline.offscreen_surface.view();
         let g_normal_view = viewport
+            .render_pipeline
             .g_normal
             .create_view(&TextureViewDescriptor::default());
         let g_material_view = viewport
+            .render_pipeline
             .g_material
             .create_view(&TextureViewDescriptor::default());
         encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Offscreen Render Pass"),
             color_attachments: &[
                 Some(RenderPassColorAttachment {
-                    view: viewport.offscreen_surface.view(),
+                    view: color_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
@@ -1207,29 +858,6 @@ impl Renderer {
             ..RenderPassDescriptor::default()
         })
     }
-
-    #[instrument(skip_all)]
-    fn prepare_ui_render_pass<'a>(
-        &self,
-        encoder: &'a mut CommandEncoder,
-        viewport: &RenderViewport,
-        _ctx: &mut FrameCtx,
-    ) -> RenderPass<'a> {
-        encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("UI Render Pass"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: viewport.offscreen_surface.view(),
-                depth_slice: None,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Load,
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            ..RenderPassDescriptor::default()
-        })
-    }
 }
 
 #[instrument(skip_all)]
@@ -1239,6 +867,7 @@ fn sorted_enabled_proxy_ids(
     store: &AssetStore,
     frustum: Option<&Frustum>,
 ) -> Vec<TypedComponentId> {
+    let is_culling_enabled = !EngineArgs::get().no_frustum_culling;
     proxies
         .iter()
         .filter(|(_, binding)| binding.enabled)
@@ -1248,9 +877,10 @@ fn sorted_enabled_proxy_ids(
             if let Some(f) = frustum
                 && let Some(bounds) = binding.bounds()
             {
-                if !f.intersects_sphere(&bounds) {
+                if is_culling_enabled && !f.intersects_sphere(&bounds) {
                     return None;
                 }
+
                 distance = f.side(FrustumSide::Near).distance_to(&bounds);
             };
 

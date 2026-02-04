@@ -6,7 +6,7 @@ use crate::rendering::cache::AssetCache;
 use crate::rendering::proxies::mesh_proxy::{MeshUniformIndex, RuntimeMeshData};
 use crate::rendering::proxies::text_proxy::TextRenderData;
 use crate::rendering::uniform::ShaderUniform;
-use crate::rendering::{FrameCtx, GPUDrawCtx, RenderPassType, State};
+use crate::rendering::{RenderPassType, State};
 use crate::strobe::ui_element::Rect;
 use crate::strobe::{CacheId, ContextWithId, LayoutElement, StrobeRoot};
 use delegate::delegate;
@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::sync::RwLock;
 use syrillian::ViewportId;
+use syrillian::rendering::viewport::RenderViewport;
 use web_time::Instant;
 use wgpu::{BindGroup, BufferDescriptor, BufferUsages, RenderPass};
 use winit::dpi::PhysicalSize;
@@ -25,10 +26,16 @@ pub struct StrobeRenderer {
     text_cache: HashMap<(CacheId, u64), TextRenderData>,
 }
 
+pub struct UiGPUContext<'a> {
+    pub pass: RwLock<RenderPass<'a>>,
+    pub pass_type: RenderPassType,
+    pub render_bind_group: &'a BindGroup,
+}
+
 pub struct UiDrawContext<'a, 'b, 'c, 'd, 'e> {
     image_cache: &'a mut HashMap<(CacheId, u64), RuntimeMeshData>,
     text_cache: &'a mut HashMap<(CacheId, u64), TextRenderData>,
-    gpu_ctx: &'b GPUDrawCtx<'e>,
+    gpu_ctx: &'b UiGPUContext<'e>,
     cache: &'c AssetCache,
     cache_id: CacheId,
     pub render_id: u32,
@@ -47,7 +54,7 @@ impl<'a, 'b, 'c, 'd, 'e> UiDrawContext<'a, 'b, 'c, 'd, 'e> {
     delegate! {
         to self {
             #[field]
-            pub fn gpu_ctx(&self) -> &GPUDrawCtx<'e>;
+            pub fn gpu_ctx(&self) -> &UiGPUContext<'e>;
 
             #[field]
             pub fn cache(&self) -> &AssetCache;
@@ -73,17 +80,7 @@ impl<'a, 'b, 'c, 'd, 'e> UiDrawContext<'a, 'b, 'c, 'd, 'e> {
             pub fn pass_type(&self) -> RenderPassType;
 
             #[field]
-            pub fn frame(&self) -> &'b FrameCtx;
-
-            #[field]
             pub fn render_bind_group(&self) -> &'b BindGroup;
-
-            #[field]
-            pub fn light_bind_group(&self) -> &'b BindGroup;
-
-            #[allow(unused)]
-            #[field]
-            fn shadow_bind_group(&self) -> &'b BindGroup;
         }
     }
 
@@ -144,22 +141,21 @@ impl StrobeRenderer {
 
     pub fn render(
         &mut self,
-        ctx: &GPUDrawCtx,
+        ctx: &UiGPUContext,
         cache: &AssetCache,
         state: &State,
-        target: ViewportId,
-        start_time: Instant,
-        viewport_size: PhysicalSize<u32>,
+        viewport: &RenderViewport,
     ) {
         let roots_map = mem::take(&mut self.strobe_roots);
 
-        let roots = roots_map.get(&target);
+        let roots = roots_map.get(&viewport.id);
 
         if roots.is_none() {
             self.strobe_roots = roots_map;
             return;
         }
 
+        let viewport_size = viewport.size();
         let mut current_context = UiDrawContext {
             image_cache: &mut self.image_cache,
             text_cache: &mut self.text_cache,
@@ -168,7 +164,7 @@ impl StrobeRenderer {
             cache_id: 0,
             render_id: 0,
             viewport_size,
-            start_time,
+            start_time: viewport.start_time,
             state,
         };
 

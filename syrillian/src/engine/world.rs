@@ -34,9 +34,11 @@ use web_time::{Duration, Instant};
 
 use crate::ViewportId;
 use crate::core::reflection::Value;
+use crate::math::UVec2;
 use crossbeam_channel::unbounded;
 use crossbeam_channel::{Receiver, Sender};
 use syrillian_macros::Reflect;
+use syrillian_utils::EngineArgs;
 use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
 
@@ -532,10 +534,11 @@ impl World {
     }
 
     pub fn create_window(&mut self) -> ViewportId {
-        self.create_window_with_size(PhysicalSize::new(800, 600))
+        self.create_window_with_size(EngineArgs::default_window_size())
     }
 
-    pub fn create_window_with_size(&mut self, size: PhysicalSize<u32>) -> ViewportId {
+    pub fn create_window_with_size(&mut self, size: UVec2) -> ViewportId {
+        let size = PhysicalSize::new(size.x, size.y);
         let target_id = self.channels.add_window(CWeak::null(), size);
         let _ = self
             .channels

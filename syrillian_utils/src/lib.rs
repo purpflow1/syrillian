@@ -1,6 +1,9 @@
+mod engine_args;
 mod logging;
 
 use std::fmt::Debug;
+
+pub use engine_args::EngineArgs;
 
 /// Trait implemented by index enums used for uniform buffers.
 pub trait ShaderUniformIndex: Debug + Sized + 'static {

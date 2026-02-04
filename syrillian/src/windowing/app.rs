@@ -12,16 +12,16 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use syrillian_utils::EngineArgs;
 use tracing::{error, info, instrument, trace, warn};
 use winit::application::ApplicationHandler;
 use winit::dpi::Size;
 use winit::error::EventLoopError;
 use winit::event::{DeviceEvent, DeviceId, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{CursorGrabMode, WindowAttributes, WindowId};
-
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::{EventLoopExtWebSys, WindowExtWebSys};
+use winit::window::{CursorGrabMode, Fullscreen, Window, WindowAttributes, WindowId};
 
 pub struct App<S: AppState> {
     main_window_attributes: WindowAttributes,
@@ -96,6 +96,10 @@ impl<S: AppState> App<S> {
         let main_window = event_loop
             .create_window(self.main_window_attributes.clone())
             .unwrap();
+
+        if EngineArgs::get().fullscreen {
+            Self::start_in_fullscreen(&main_window);
+        }
 
         #[cfg(target_arch = "wasm32")]
         if let Some(canvas) = main_window.canvas() {
@@ -242,6 +246,33 @@ impl<S: AppState> App<S> {
         };
 
         Self::handle_events(presenter, render_thread, game_thread, event_loop)
+    }
+
+    fn start_in_fullscreen(main_window: &Window) {
+        if cfg!(target_os = "macos") {
+            main_window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+        } else {
+            let Some(monitor) = main_window
+                .current_monitor()
+                .or_else(|| main_window.primary_monitor())
+            else {
+                warn!("No monitor found to be fullscreen on");
+                return;
+            };
+
+            let available_video_modes: Vec<_> = monitor.video_modes().collect();
+            trace!("All available video modes: {available_video_modes:?}");
+
+            let Some(next) = available_video_modes.into_iter().next() else {
+                let name = monitor
+                    .name()
+                    .unwrap_or_else(|| "Generic Monitor".to_string());
+                warn!("No video mode handle found for switching to fullscreen on monitor {name:?}");
+                return;
+            };
+
+            main_window.set_fullscreen(Some(Fullscreen::Exclusive(next)));
+        }
     }
 }
 
