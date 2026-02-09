@@ -238,18 +238,13 @@ impl Renderer {
     #[instrument(skip_all)]
     #[profiling::function]
     fn render_frame_inner(&mut self, viewport: &mut RenderViewport) -> RenderedFrame {
-        let mut ctx = viewport.begin_render();
-
-        self.render(viewport, &mut ctx);
-
-        if self.cache.last_refresh().elapsed().as_secs_f32() > 5.0 {
-            trace!("Refreshing cache...");
-            let refreshed_count = self.cache.refresh_all();
-            if cfg!(debug_assertions) && refreshed_count != 0 {
-                trace!("Refreshed cache elements {}", refreshed_count);
-            }
+        let refreshed_count = self.cache.refresh_all();
+        if cfg!(debug_assertions) && refreshed_count != 0 {
+            trace!("Refreshed cache elements {}", refreshed_count);
         }
 
+        let mut ctx = viewport.begin_render();
+        self.render(viewport, &mut ctx);
         self.finalize_frame(viewport)
     }
 
