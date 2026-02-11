@@ -1,5 +1,6 @@
 [package]
 name = "syrillian_asset"
+description = "Asset Types and Store for the Syrillian Game Engine"
 version.workspace = true
 license.workspace = true
 edition.workspace = true

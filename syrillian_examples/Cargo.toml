@@ -1,6 +1,7 @@
 [package]
 name = "syrillian_examples"
-version = "0.1.0"
+description = "Examples on how to use the Syrillian Game Engine"
+version = "0.1.1"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

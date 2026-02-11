@@ -1,5 +1,6 @@
 [package]
 name = "syrillian_render"
+description = "Renderer of the Syrillian Game Engine"
 version.workspace = true
 license.workspace = true
 edition.workspace = true

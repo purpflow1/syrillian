@@ -14,7 +14,7 @@ members = [
     "syrillian_shadergen", "syrillian_asset", "syrillian_render"]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 license = "MIT"
 edition = "2024"
 repository = "https://github.com/Kek5chen/syrillian"
@@ -37,15 +37,15 @@ lto = "fat"
 panic = "abort"
 
 [workspace.dependencies]
-syrillian = { version = "0.7.0", path = "syrillian", default-features = false }
-syrillian_asset = { version = "0.7.0", path = "syrillian_asset", default-features = false }
-syrillian_utils = { version = "0.7.0", path = "syrillian_utils", default-features = false }
-syrillian_macros = { version = "0.7.0", path = "syrillian_macros", default-features = false }
-syrillian_components = { version = "0.1.0", path = "syrillian_components", default-features = false }
-syrillian_scene = { version = "0.1.0", path = "syrillian_scene", default-features = false }
-syrillian_examples = { version = "0.1.0", path = "syrillian_examples", default-features = false }
-syrillian_shadergen = { version = "0.7.0", path = "syrillian_shadergen", default-features = false }
-syrillian_render = { version = "0.7.0", path = "syrillian_render", default-features = false }
+syrillian = { version = "0.7.1", path = "syrillian", default-features = false }
+syrillian_asset = { version = "0.7.1", path = "syrillian_asset", default-features = false }
+syrillian_utils = { version = "0.7.1", path = "syrillian_utils", default-features = false }
+syrillian_macros = { version = "0.7.1", path = "syrillian_macros", default-features = false }
+syrillian_components = { version = "0.3.0", path = "syrillian_components", default-features = false }
+syrillian_scene = { version = "0.2.1", path = "syrillian_scene", default-features = false }
+syrillian_examples = { version = "0.1.1", path = "syrillian_examples", default-features = false }
+syrillian_shadergen = { version = "0.7.1", path = "syrillian_shadergen", default-features = false }
+syrillian_render = { version = "0.7.1", path = "syrillian_render", default-features = false }
 
 wgpu = { version = "28.0", default-features = false, features = ["wgsl"] }
 naga = { version = "28.0", features = ["stderr"] }

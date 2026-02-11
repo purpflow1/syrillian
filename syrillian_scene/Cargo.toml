@@ -1,7 +1,7 @@
 [package]
 name = "syrillian_scene"
 description = "Scene/Asset Loader for the Syrillian Game Engine"
-version = "0.1.0"
+version = "0.2.1"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

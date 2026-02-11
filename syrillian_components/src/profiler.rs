@@ -133,7 +133,7 @@ impl Profiler {
         let rebuild = self
             .gbuffer_view
             .as_ref()
-            .map_or(true, |view| view.size != size);
+            .is_none_or(|view| view.size != size);
 
         if rebuild {
             self.release_gbuffer_assets(world);
