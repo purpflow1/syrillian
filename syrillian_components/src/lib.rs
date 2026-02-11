@@ -67,8 +67,9 @@ pub use gravity::GravityComponent;
 pub use joints::{
     FixedJoint, PrismaticJoint, RevoluteJoint, RopeJoint, SphericalJoint, SpringJoint,
 };
-pub use light::{PointLightComponent, SpotLightComponent, Sun, SunLightComponent};
+pub use light::{PointLightComponent, SpotLightComponent, SunLightComponent};
 pub use mesh_renderer::MeshRenderer;
+pub use particle_system::ParticleSystemComponent;
 pub use profiler::Profiler;
 pub use rigid_body::RigidBodyComponent;
 pub use rotate::RotateComponent;
