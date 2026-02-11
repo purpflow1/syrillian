@@ -3547,7 +3547,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bytemuck",
  "chrono",
@@ -3583,7 +3583,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian_asset"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bon",
  "bytemuck",
@@ -3639,7 +3639,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian_macros"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "quote",
  "syn",
@@ -3649,7 +3649,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian_render"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bytemuck",
  "crossbeam-channel",
@@ -3697,7 +3697,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian_shadergen"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bytemuck",
  "glamx",
@@ -3708,7 +3708,7 @@ dependencies = [
 
 [[package]]
 name = "syrillian_utils"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "argh",
  "glamx",
