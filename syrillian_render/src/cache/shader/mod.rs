@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use syrillian_asset::Shader;
 use syrillian_asset::shader::{BindGroupMap, ShaderType};
-use tracing::debug;
 use wgpu::*;
 
 mod bindings;

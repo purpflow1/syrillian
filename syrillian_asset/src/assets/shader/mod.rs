@@ -28,7 +28,6 @@ use syrillian_shadergen::generator::{
 };
 use syrillian_shadergen::generator::{MeshPass, MeshSkinning, PICKING_TEXTURE_FORMAT};
 use syrillian_utils::sizes::{VEC2_SIZE, VEC3_SIZE, VEC4_SIZE, WGPU_VEC4_ALIGN};
-use tracing::debug;
 use wgpu::{
     ColorTargetState, ColorWrites, PolygonMode, PrimitiveTopology, VertexAttribute,
     VertexBufferLayout, VertexFormat, VertexStepMode,
@@ -229,7 +228,6 @@ impl StoreDefaults for Shader {
         let mesh3d =
             MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Unskinned, MeshPass::Base);
 
-        debug!("{mesh3d}");
         let mesh3d_skinned =
             MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Skinned, MeshPass::Base);
         let mesh3d_picking = MaterialCompiler::compile_mesh_picking(MeshSkinning::Unskinned);
@@ -830,8 +828,6 @@ impl Shader {
             self.depth_enabled,
             material_groups,
         );
-
-        debug!("Generated shader {:?}: {generated}", self.name());
 
         rewrite_bind_groups(generated, map)
     }
