@@ -2,8 +2,8 @@ use crate::cache::{AssetCache, CacheType, GpuTexture};
 use std::collections::HashMap;
 use std::sync::Arc;
 use syrillian_asset::MaterialInstance;
+use syrillian_asset::MaterialShaderSet;
 use syrillian_asset::material_inputs::MaterialInputLayout;
-use syrillian_asset::{HMaterial, MaterialShaderSet};
 use syrillian_shadergen::generator::MeshSkinning;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, Device, Queue, TextureFormat,
@@ -53,12 +53,7 @@ impl CacheType for MaterialInstance {
 
     #[profiling::function]
     fn upload(mut self, device: &Device, _queue: &Queue, cache: &AssetCache) -> Self::Hot {
-        let material_def = cache
-            .store()
-            .materials
-            .try_get(self.material)
-            .map(|m| m.clone())
-            .unwrap_or_else(|| cache.store().materials.get(HMaterial::FALLBACK).clone());
+        let material_def = cache.store().materials.get(self.material).clone();
 
         let layout = material_def.layout().clone();
         let shader_unskinned = material_def.shader_set(MeshSkinning::Unskinned);
