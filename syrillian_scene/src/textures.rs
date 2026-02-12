@@ -25,9 +25,9 @@ pub(super) fn load_materials(
         let metallic = pbr.metallic_factor();
         let roughness = pbr.roughness_factor();
 
-        let diffuse_texture = load_texture(scene, world, pbr.base_color_texture());
-        let normal_texture = load_texture(scene, world, mat.normal_texture());
-        let roughness_texture = load_texture(scene, world, pbr.metallic_roughness_texture());
+        let diffuse_texture = load_texture(scene, world, pbr.base_color_texture(), true);
+        let normal_texture = load_texture(scene, world, mat.normal_texture(), false);
+        let roughness_texture = load_texture(scene, world, pbr.metallic_roughness_texture(), false);
 
         let lit = !mat.unlit();
 
@@ -55,6 +55,7 @@ pub(super) fn load_texture<'a, T>(
     scene: &'a GltfScene,
     world: &mut World,
     info: Option<T>,
+    srgb: bool,
 ) -> Option<HTexture2D>
 where
     T: AsRef<gltf::texture::Texture<'a>>,
@@ -71,8 +72,20 @@ where
     let format = match original_format {
         Format::R8 => TextureFormat::R8Unorm,
         Format::R8G8 => TextureFormat::Rg8Unorm,
-        Format::R8G8B8 => TextureFormat::Rgba8UnormSrgb,
-        Format::R8G8B8A8 => TextureFormat::Rgba8UnormSrgb,
+        Format::R8G8B8 => {
+            if srgb {
+                TextureFormat::Rgba8UnormSrgb
+            } else {
+                TextureFormat::Rgba8Unorm
+            }
+        }
+        Format::R8G8B8A8 => {
+            if srgb {
+                TextureFormat::Rgba8UnormSrgb
+            } else {
+                TextureFormat::Rgba8Unorm
+            }
+        }
         Format::R16 => TextureFormat::R16Unorm,
         Format::R16G16 => TextureFormat::Rg16Snorm,
         Format::R16G16B16 => {
