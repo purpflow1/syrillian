@@ -206,12 +206,12 @@ fn point_face_axes(dir: vec3<f32>) -> CubeFaceAxes {
 
 fn cube_face_axes_from_index(face: u32) -> CubeFaceAxes {
     switch (face) {
-        case 0u: { return CubeFaceAxes(vec3<f32>( 1.0,  0.0,  0.0), vec3<f32>( 0.0, -1.0,  0.0), 0u); }
-        case 1u: { return CubeFaceAxes(vec3<f32>(-1.0,  0.0,  0.0), vec3<f32>( 0.0, -1.0,  0.0), 1u); }
-        case 2u: { return CubeFaceAxes(vec3<f32>( 0.0,  1.0,  0.0), vec3<f32>( 0.0,  0.0,  1.0), 2u); }
-        case 3u: { return CubeFaceAxes(vec3<f32>( 0.0, -1.0,  0.0), vec3<f32>( 0.0,  0.0, -1.0), 3u); }
-        case 4u: { return CubeFaceAxes(vec3<f32>( 0.0,  0.0,  1.0), vec3<f32>( 0.0, -1.0,  0.0), 4u); }
-        default: { return CubeFaceAxes(vec3<f32>( 0.0,  0.0, -1.0), vec3<f32>( 0.0, -1.0,  0.0), 5u); }
+        case 0u: { return CubeFaceAxes(vec3<f32>( 1.0,  0.0,  0.0), vec3<f32>(0.0, -1.0,  0.0), 0u); }
+        case 1u: { return CubeFaceAxes(vec3<f32>(-1.0,  0.0,  0.0), vec3<f32>(0.0, -1.0,  0.0), 1u); }
+        case 2u: { return CubeFaceAxes(vec3<f32>( 0.0,  1.0,  0.0), vec3<f32>(0.0,  0.0,  1.0), 2u); }
+        case 3u: { return CubeFaceAxes(vec3<f32>( 0.0, -1.0,  0.0), vec3<f32>(0.0,  0.0, -1.0), 3u); }
+        case 4u: { return CubeFaceAxes(vec3<f32>( 0.0,  0.0,  1.0), vec3<f32>(0.0, -1.0,  0.0), 4u); }
+        default: { return CubeFaceAxes(vec3<f32>( 0.0,  0.0, -1.0), vec3<f32>(0.0, -1.0,  0.0), 5u); }
     }
 }
 
