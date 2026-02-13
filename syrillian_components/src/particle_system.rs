@@ -117,7 +117,7 @@ impl Default for ParticleSystemComponent {
                 lifetime_random_min: 1.0,
                 lifetime_random_max: 1.0,
             },
-            particle_count: 10_000_000,
+            particle_count: 10,
         }
     }
 }
