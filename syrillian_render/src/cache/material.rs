@@ -4,7 +4,6 @@ use std::sync::Arc;
 use syrillian_asset::MaterialInstance;
 use syrillian_asset::MaterialShaderSet;
 use syrillian_asset::material_inputs::MaterialInputLayout;
-use syrillian_shadergen::generator::MeshSkinning;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, Device, Queue, TextureFormat,
 };
@@ -13,8 +12,7 @@ use wgpu::{
 pub struct RuntimeMaterial {
     pub immediates: Vec<u8>,
     pub bind_group: BindGroup,
-    pub shader_unskinned: MaterialShaderSet,
-    pub shader_skinned: MaterialShaderSet,
+    pub shader_set: MaterialShaderSet,
     pub transparent: bool,
     pub cast_shadows: bool,
 }
@@ -56,8 +54,7 @@ impl CacheType for MaterialInstance {
         let material_def = cache.store().materials.get(self.material).clone();
 
         let layout = material_def.layout().clone();
-        let shader_unskinned = material_def.shader_set(MeshSkinning::Unskinned);
-        let shader_skinned = material_def.shader_set(MeshSkinning::Skinned);
+        let shader_set = material_def.shader_set();
 
         let (textures, texture_map) = material_textures(&self, &layout, cache);
 
@@ -108,8 +105,7 @@ impl CacheType for MaterialInstance {
         Arc::new(RuntimeMaterial {
             immediates,
             bind_group,
-            shader_unskinned,
-            shader_skinned,
+            shader_set,
             transparent,
             cast_shadows,
         })

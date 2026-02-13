@@ -22,6 +22,7 @@
 //!
 //! To see how you can use an asset on the GPU, check [`AssetCache`](syrillian::engine::rendering::cache::asset_cache::AssetCache)
 
+pub mod compute_shader;
 pub mod material_inputs;
 pub mod mesh;
 pub mod shader;
@@ -40,6 +41,7 @@ pub mod texture_2d;
 pub mod texture_2d_array;
 
 pub use self::bind_group_layout::*;
+pub use self::compute_shader::*;
 pub use self::cubemap::*;
 pub use self::font::Font;
 pub use self::material::*;
@@ -60,6 +62,7 @@ pub type HMaterial = H<Material>;
 pub type HMaterialInstance = H<MaterialInstance>;
 pub type HMesh = H<Mesh>;
 pub type HShader = H<Shader>;
+pub type HComputeShader = H<ComputeShader>;
 pub type HTexture2D = H<Texture2D>;
 pub type HTexture2DArray = H<Texture2DArray>;
 pub type HCubemap = H<Cubemap>;

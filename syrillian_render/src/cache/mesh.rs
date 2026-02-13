@@ -56,6 +56,26 @@ impl Meshlet {
         }
     }
 
+    pub fn draw_with_vertex_buffer(
+        &self,
+        range: Range<u32>,
+        vertex_buffer: &wgpu::Buffer,
+        pass: &mut wgpu::RenderPass<'_>,
+    ) {
+        let Some(inner_range) = self.clamp_range(range) else {
+            debug_panic!("Meshlet received invalid draw command");
+            return;
+        };
+
+        pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        if let Some(i_buffer) = &self.index_buffer {
+            pass.set_index_buffer(i_buffer.slice(..), IndexFormat::Uint32);
+            pass.draw_indexed(inner_range, 0, 0..1);
+        } else {
+            pass.draw(inner_range, 0..1);
+        }
+    }
+
     pub fn draw_as_instances(
         &self,
         range: Range<u32>,
@@ -156,6 +176,27 @@ impl RuntimeMesh {
         }
     }
 
+    pub fn draw_with_vertex_buffers(
+        &self,
+        range: Range<u32>,
+        vertex_buffers: &[wgpu::Buffer],
+        pass: &mut wgpu::RenderPass<'_>,
+    ) {
+        debug_assert_eq!(
+            vertex_buffers.len(),
+            self.meshlets.len(),
+            "Skinned vertex buffers should match meshlet count"
+        );
+
+        for (meshlet, vertex_buffer) in self.meshlets.iter().zip(vertex_buffers) {
+            if !meshlet.applies_to(range.clone()) {
+                continue;
+            }
+
+            meshlet.draw_with_vertex_buffer(range.clone(), vertex_buffer, pass);
+        }
+    }
+
     pub fn draw_as_instances(
         &self,
         range: Range<u32>,
@@ -222,7 +263,7 @@ impl CacheType for Mesh {
             let vertex_buf = device.create_buffer_init(&BufferInitDescriptor {
                 label: Some("Mesh Vertex Buffer"),
                 contents: bytemuck::cast_slice(self.vertices()),
-                usage: BufferUsages::VERTEX,
+                usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
             });
 
             for i in 0..=(indices_num / MAX_BUFFER_INDICES) {
@@ -249,7 +290,7 @@ impl CacheType for Mesh {
                 let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
                     label: Some("Mesh Vertex Buffer"),
                     contents: bytemuck::cast_slice(&vertices[start..end]),
-                    usage: BufferUsages::VERTEX,
+                    usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 });
                 meshlets.push(Meshlet {
                     vertex_buffer,

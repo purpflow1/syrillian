@@ -159,7 +159,14 @@ impl DebugSceneProxy {
             .with_buffer_data(&BoneData::DUMMY)
             .build(device);
 
-        Some(RuntimeMeshData { mesh_data, uniform })
+        Some(RuntimeMeshData {
+            mesh_data,
+            uniform,
+            skinned_buffers: Vec::new(),
+            skinning_uniforms: Vec::new(),
+            skinning_vertex_counts: Vec::new(),
+            skinning_mesh: None,
+        })
     }
 
     fn update_mesh_buffer(

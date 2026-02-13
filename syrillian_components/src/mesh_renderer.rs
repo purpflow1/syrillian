@@ -90,6 +90,7 @@ impl Component for MeshRenderer {
                 data.mesh = h_mesh;
                 data.bounding = (!skinned).then_some(bounds);
                 data.skinned = skinned;
+                data.bones_dirty = skinned;
             })
         }
 

@@ -21,10 +21,9 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 use syrillian_shadergen::function::{PbrShader, PostProcessPassthroughMaterial};
-use syrillian_shadergen::generator::{
-    MaterialCompiler, MaterialGroupOverrides, PostProcessCompiler, ShaderKind, assemble_shader,
-};
-use syrillian_shadergen::generator::{MeshPass, MeshSkinning, PICKING_TEXTURE_FORMAT};
+use syrillian_shadergen::generator::{MaterialGroupOverrides, ShaderKind, assemble_shader};
+use syrillian_shadergen::generator::{MeshPass, PICKING_TEXTURE_FORMAT};
+use syrillian_shadergen::{MaterialCompiler, PostProcessCompiler};
 use syrillian_utils::sizes::{VEC2_SIZE, VEC3_SIZE, VEC4_SIZE, WGPU_VEC4_ALIGN};
 use wgpu::{
     ColorTargetState, ColorWrites, PolygonMode, PrimitiveTopology, VertexAttribute,
@@ -125,20 +124,14 @@ impl H<Shader> {
     pub const TEXT_3D_ID: u32 = 8;
     pub const TEXT_3D_PICKER_ID: u32 = 9;
     pub const LINE_2D_ID: u32 = 10;
-    pub const POST_PROCESS_SSR_ID: u32 = 11;
-
-    pub const DEBUG_EDGES_ID: u32 = 12;
-    pub const DEBUG_VERTEX_NORMALS_ID: u32 = 13;
-    pub const DEBUG_LINES_ID: u32 = 14;
-    pub const DEBUG_TEXT2D_GEOMETRY_ID: u32 = 15;
-    pub const DEBUG_TEXT3D_GEOMETRY_ID: u32 = 16;
-    pub const DEBUG_LIGHT_ID: u32 = 17;
-
-    pub const DIM3_SKINNED_ID: u32 = 18;
-    pub const DIM3_PICKER_SKINNED_ID: u32 = 19;
-    pub const DIM3_SHADOW_ID: u32 = 20;
-    pub const DIM3_SHADOW_SKINNED_ID: u32 = 21;
-    pub const MAX_BUILTIN_ID: u32 = 21;
+    pub const DEBUG_EDGES_ID: u32 = 11;
+    pub const DEBUG_VERTEX_NORMALS_ID: u32 = 12;
+    pub const DEBUG_LINES_ID: u32 = 13;
+    pub const DEBUG_TEXT2D_GEOMETRY_ID: u32 = 14;
+    pub const DEBUG_TEXT3D_GEOMETRY_ID: u32 = 15;
+    pub const DEBUG_LIGHT_ID: u32 = 16;
+    pub const DIM3_SHADOW_ID: u32 = 17;
+    pub const MAX_BUILTIN_ID: u32 = 17;
 
     // The fallback shader if a pipeline fails
     pub const FALLBACK: H<Shader> = H::new(Self::FALLBACK_ID);
@@ -155,17 +148,8 @@ impl H<Shader> {
     // The default 3D picking shader.
     pub const DIM3_PICKING: H<Shader> = H::new(Self::DIM3_PICKER_ID);
 
-    // Default 3D skinned shader.
-    pub const DIM3_SKINNED: H<Shader> = H::new(Self::DIM3_SKINNED_ID);
-
-    // Default 3D skinned picking shader.
-    pub const DIM3_PICKING_SKINNED: H<Shader> = H::new(Self::DIM3_PICKER_SKINNED_ID);
-
     // Default 3D shadow shader.
     pub const DIM3_SHADOW: H<Shader> = H::new(Self::DIM3_SHADOW_ID);
-
-    // Default 3D skinned shadow shader.
-    pub const DIM3_SHADOW_SKINNED: H<Shader> = H::new(Self::DIM3_SHADOW_SKINNED_ID);
 
     // Default post-processing shader
     pub const POST_PROCESS: H<Shader> = H::new(Self::POST_PROCESS_ID);
@@ -184,9 +168,6 @@ impl H<Shader> {
 
     // Shader for drawing single 2D lines.
     pub const LINE_2D: H<Shader> = H::new(Self::LINE_2D_ID);
-
-    // Post processing shader for screen space reflection
-    pub const POST_PROCESS_SSR: H<Shader> = H::new(Self::POST_PROCESS_SSR_ID);
 
     // An addon shader ID that is used for drawing debug edges on meshes
     pub const DEBUG_EDGES: H<Shader> = H::new(Self::DEBUG_EDGES_ID);
@@ -209,7 +190,6 @@ const SHADER_TEXT2D_PICKER: &str = include_str!("shaders/picking_text2d.wgsl");
 const SHADER_TEXT3D: &str = include_str!("shaders/text3d.wgsl");
 const SHADER_TEXT3D_PICKER: &str = include_str!("shaders/picking_text3d.wgsl");
 const SHADER_LINE2D: &str = include_str!("shaders/line.wgsl");
-const SHADER_POST_PROCESS_SSR: &str = include_str!("shaders/ssr_post_process.wgsl");
 
 const DEBUG_EDGES_SHADER: &str = include_str!("shaders/debug/edges.wgsl");
 const DEBUG_VERTEX_NORMAL_SHADER: &str = include_str!("shaders/debug/vertex_normals.wgsl");
@@ -223,17 +203,9 @@ impl StoreDefaults for Shader {
         let post_process_fs =
             PostProcessCompiler::compile_post_process_fragment(&PostProcessPassthroughMaterial, 0);
         let mut pbr = PbrShader::default();
-        let mesh3d =
-            MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Unskinned, MeshPass::Base);
-
-        let mesh3d_skinned =
-            MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Skinned, MeshPass::Base);
-        let mesh3d_picking = MaterialCompiler::compile_mesh_picking(MeshSkinning::Unskinned);
-        let mesh3d_picking_skinned = MaterialCompiler::compile_mesh_picking(MeshSkinning::Skinned);
-        let mesh3d_shadow =
-            MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Unskinned, MeshPass::Shadow);
-        let mesh3d_shadow_skinned =
-            MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Skinned, MeshPass::Shadow);
+        let mesh3d = MaterialCompiler::compile_mesh(&mut pbr, 0, MeshPass::Base);
+        let mesh3d_picking = MaterialCompiler::compile_mesh_picking();
+        let mesh3d_shadow = MaterialCompiler::compile_mesh(&mut pbr, 0, MeshPass::Shadow);
 
         let default_layout = Material::default_layout();
         let material_groups = MaterialShaderGroups {
@@ -410,12 +382,6 @@ impl StoreDefaults for Shader {
 
         store_add_checked!(
             store,
-            HShader::POST_PROCESS_SSR_ID,
-            Shader::new_post_process("SSR Post Process", SHADER_POST_PROCESS_SSR)
-        );
-
-        store_add_checked!(
-            store,
             HShader::DEBUG_EDGES_ID,
             Shader::builder()
                 .shader_type(ShaderType::Custom)
@@ -523,49 +489,11 @@ impl StoreDefaults for Shader {
 
         store_add_checked!(
             store,
-            HShader::DIM3_SKINNED_ID,
-            Shader::builder()
-                .shader_type(ShaderType::Custom)
-                .name("3D Skinned")
-                .code(ShaderCode::Full(mesh3d_skinned))
-                .immediate_size(material_immediates)
-                .material_layout(default_layout.clone())
-                .material_groups(material_groups.clone())
-                .build()
-        );
-
-        store_add_checked!(
-            store,
-            HShader::DIM3_PICKER_SKINNED_ID,
-            Shader::builder()
-                .shader_type(ShaderType::Custom)
-                .name("Default 3D Skinned Picking Shader")
-                .code(ShaderCode::Full(mesh3d_picking_skinned))
-                .immediate_size(VEC4_SIZE as u32)
-                .color_target(PICKING_COLOR_TARGET)
-                .build()
-        );
-
-        store_add_checked!(
-            store,
             HShader::DIM3_SHADOW_ID,
             Shader::builder()
                 .shader_type(ShaderType::Custom)
                 .name("Default 3D Shadow Shader")
                 .code(ShaderCode::Full(mesh3d_shadow))
-                .immediate_size(material_immediates)
-                .material_layout(default_layout.clone())
-                .material_groups(material_groups.clone())
-                .build()
-        );
-
-        store_add_checked!(
-            store,
-            HShader::DIM3_SHADOW_SKINNED_ID,
-            Shader::builder()
-                .shader_type(ShaderType::Custom)
-                .name("Default 3D Skinned Shadow Shader")
-                .code(ShaderCode::Full(mesh3d_shadow_skinned))
                 .immediate_size(material_immediates)
                 .material_layout(default_layout.clone())
                 .material_groups(material_groups.clone())
@@ -589,15 +517,11 @@ impl StoreType for Shader {
             HShader::FALLBACK_ID => "Diffuse Fallback",
             HShader::DIM2_ID => "2 Dimensional Shader",
             HShader::DIM3_ID => "3 Dimensional Shader",
-            HShader::DIM3_SKINNED_ID => "3 Dimensional Skinned Shader",
             HShader::DIM3_PICKER_ID => "3 Dimensional Picking Shader",
-            HShader::DIM3_PICKER_SKINNED_ID => "3 Dimensional Skinned Picking Shader",
             HShader::DIM3_SHADOW_ID => "3 Dimensional Shadow Shader",
-            HShader::DIM3_SHADOW_SKINNED_ID => "3 Dimensional Skinned Shadow Shader",
             HShader::TEXT_2D_ID => "2D Text Shader",
             HShader::TEXT_3D_ID => "3D Text Shader",
             HShader::POST_PROCESS_ID => "Post Process Shader",
-            HShader::POST_PROCESS_SSR_ID => "SSR Post Process Shader",
 
             HShader::DEBUG_EDGES_ID => "Debug Edges Shader",
             HShader::DEBUG_VERTEX_NORMALS_ID => "Debug Vertex Normals Shader",

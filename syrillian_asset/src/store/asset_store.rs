@@ -13,11 +13,12 @@ use crate::store::{Store, StoreType};
 use std::sync::Arc;
 use syrillian_shadergen::MaterialCompiler;
 use syrillian_shadergen::function::MaterialExpression;
-use syrillian_shadergen::generator::{MaterialShaderSetCode, MeshSkinning};
+use syrillian_shadergen::generator::MaterialShaderSetCode;
 
 pub struct AssetStore {
     pub meshes: Arc<Store<Mesh>>,
     pub shaders: Arc<Store<Shader>>,
+    pub compute_shaders: Arc<Store<ComputeShader>>,
     pub textures: Arc<Store<Texture2D>>,
     pub texture_arrays: Arc<Store<Texture2DArray>>,
     pub cubemaps: Arc<Store<Cubemap>>,
@@ -36,6 +37,7 @@ impl AssetStore {
         Arc::new(AssetStore {
             meshes: Arc::new(Store::populated()),
             shaders: Arc::new(Store::populated()),
+            compute_shaders: Arc::new(Store::populated()),
             textures: Arc::new(Store::populated()),
             texture_arrays: Arc::new(Store::empty()),
             cubemaps: Arc::new(Store::empty()),
@@ -66,20 +68,10 @@ impl AssetStore {
     ) -> HMaterial {
         let name = name.into();
 
-        let unskinned =
-            MaterialCompiler::compile_shader_set(&mut material_expr, MeshSkinning::Unskinned);
-        let skinned =
-            MaterialCompiler::compile_shader_set(&mut material_expr, MeshSkinning::Skinned);
+        let shader_code = MaterialCompiler::compile_shader_set(&mut material_expr);
+        let shader_set = self.store_shader_set(&name, shader_code, &layout);
 
-        let unskinned_set = self.store_shader_set(&name, unskinned, &layout);
-        let skinned_set = self.store_shader_set(&name, skinned, &layout);
-
-        let material = Material::Custom(CustomMaterial::new(
-            name,
-            layout,
-            unskinned_set,
-            skinned_set,
-        ));
+        let material = Material::Custom(CustomMaterial::new(name, layout, shader_set));
         self.materials.add(material)
     }
 
@@ -139,6 +131,12 @@ impl AsRef<Store<Mesh>> for AssetStore {
 impl AsRef<Store<Shader>> for AssetStore {
     fn as_ref(&self) -> &Store<Shader> {
         &self.shaders
+    }
+}
+
+impl AsRef<Store<ComputeShader>> for AssetStore {
+    fn as_ref(&self) -> &Store<ComputeShader> {
+        &self.compute_shaders
     }
 }
 

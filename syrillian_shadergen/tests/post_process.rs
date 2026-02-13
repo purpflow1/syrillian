@@ -1,5 +1,5 @@
+use syrillian_shadergen::PostProcessCompiler;
 use syrillian_shadergen::function::PostProcessPassthroughMaterial;
-use syrillian_shadergen::generator::PostProcessCompiler;
 
 #[test]
 fn compiles_post_process_passthrough() {

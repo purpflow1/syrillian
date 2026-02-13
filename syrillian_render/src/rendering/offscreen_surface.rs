@@ -10,6 +10,15 @@ pub struct OffscreenSurface {
 
 impl OffscreenSurface {
     pub fn new(device: &Device, config: &SurfaceConfiguration) -> Self {
+        Self::new_with(device, config, config.format, TextureUsages::empty())
+    }
+
+    pub fn new_with(
+        device: &Device,
+        config: &SurfaceConfiguration,
+        format: wgpu::TextureFormat,
+        extra_usage: TextureUsages,
+    ) -> Self {
         let texture = device.create_texture(&TextureDescriptor {
             label: Some("Offscreen Texture"),
             size: Extent3d {
@@ -20,11 +29,12 @@ impl OffscreenSurface {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: config.format,
+            format,
             usage: TextureUsages::RENDER_ATTACHMENT
                 | TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_SRC
-                | TextureUsages::COPY_DST,
+                | TextureUsages::COPY_DST
+                | extra_usage,
             view_formats: &[],
         });
 

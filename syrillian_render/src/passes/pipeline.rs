@@ -27,6 +27,7 @@ pub struct RenderPipeline {
 impl RenderPipeline {
     pub fn new(device: &Device, cache: &AssetCache, config: &SurfaceConfiguration) -> Self {
         let pp_bgl = cache.bgl_post_process();
+        let pp_compute_bgl = cache.bgl_post_process_compute();
 
         let normal_texture = Self::create_g_buffer("GBuffer (Normals)", device, config);
         let material_texture = Self::create_material_texture(device, config);
@@ -44,7 +45,7 @@ impl RenderPipeline {
         let ssr_pass = ScreenSpaceReflectionRenderPass::new(
             device,
             config,
-            pp_bgl.clone(),
+            pp_compute_bgl.clone(),
             &offscreen_surface,
             depth_view.clone(),
             normal_view.clone(),

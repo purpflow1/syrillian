@@ -1,33 +1,40 @@
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> FInput {
-    let positions = array<vec2f, 6>(
-        vec2f(-1.0, -1.0),
-        vec2f(1.0, -1.0),
-        vec2f(-1.0, 1.0),
-        vec2f(-1.0, 1.0),
-        vec2f(1.0, -1.0),
-        vec2f(1.0, 1.0),
-    );
-    let uvs = array<vec2f, 6>(
-        vec2f(0.0, 1.0),
-        vec2f(1.0, 1.0),
-        vec2f(0.0, 0.0),
-        vec2f(0.0, 0.0),
-        vec2f(1.0, 1.0),
-        vec2f(1.0, 0.0),
-    );
-
-    var output: FInput;
-    output.position = vec4f(positions[vertex_index], 0.0, 1.0);
-    output.uv = uvs[vertex_index];
-    return output;
+struct CameraData {
+    position: vec3<f32>,
+    fov: f32,
+    view_mat: mat4x4<f32>,
+    projection_mat: mat4x4<f32>,
+    view_proj_mat: mat4x4<f32>,
+    inv_view_proj_mat: mat4x4<f32>,
+    near: f32,
+    far: f32,
+    fov_target: f32,
+    zoom_speed: f32,
 }
 
-fn uv_to_pixel(uv: vec2f) -> vec2i {
-    let size = vec2f(system.screen);
-    let max_uv = (size - vec2f(1.0)) / size;
+struct SystemData {
+    screen: vec2<u32>,
+    time: f32,
+    delta_time: f32,
+}
+
+@group(0) @binding(0) var<uniform> camera: CameraData;
+@group(0) @binding(1) var<uniform> system: SystemData;
+
+@group(1) @binding(0) var postTexture: texture_2d<f32>;
+@group(1) @binding(1) var postSampler: sampler;
+@group(1) @binding(2) var postDepth: texture_depth_2d;
+@group(1) @binding(3) var postNormal: texture_2d<f32>;
+@group(1) @binding(4) var postMaterial: texture_2d<f32>;
+@group(1) @binding(5) var ssrOutput: texture_storage_2d<rgba8unorm, write>;
+
+fn saturate(x: f32) -> f32 {
+    return clamp(x, 0.0, 1.0);
+}
+
+fn uv_to_pixel(uv: vec2f, size_f: vec2f) -> vec2i {
+    let max_uv = (size_f - vec2f(1.0)) / size_f;
     let clamped = clamp(uv, vec2f(0.0), max_uv);
-    return vec2i(clamped * size);
+    return vec2i(clamped * size_f);
 }
 
 fn oct_decode(enc_in: vec2f) -> vec3f {
@@ -65,11 +72,11 @@ fn sample_reflection(uv: vec2f, roughness: f32, pixel_size: vec2f) -> vec4f {
     let r = roughness * roughness * 6.0;
     let o = pixel_size * r;
 
-    var c = textureSample(postTexture, postSampler, uv);
-    c += textureSample(postTexture, postSampler, uv + vec2f(o.x, 0.0));
-    c += textureSample(postTexture, postSampler, uv - vec2f(o.x, 0.0));
-    c += textureSample(postTexture, postSampler, uv + vec2f(0.0, o.y));
-    c += textureSample(postTexture, postSampler, uv - vec2f(0.0, o.y));
+    var c = textureSampleLevel(postTexture, postSampler, uv, 0.0);
+    c += textureSampleLevel(postTexture, postSampler, uv + vec2f(o.x, 0.0), 0.0);
+    c += textureSampleLevel(postTexture, postSampler, uv - vec2f(o.x, 0.0), 0.0);
+    c += textureSampleLevel(postTexture, postSampler, uv + vec2f(0.0, o.y), 0.0);
+    c += textureSampleLevel(postTexture, postSampler, uv - vec2f(0.0, o.y), 0.0);
     return c * 0.2;
 }
 
@@ -79,19 +86,25 @@ fn depth_to_view_z(depth_ndc: f32) -> f32 {
     return (n * f) / max(f - depth_ndc * (f - n), 1e-6);
 }
 
-@fragment
-fn fs_main(
-    @location(0) uv: vec2f,
-    @builtin(position) frag_coord: vec4f,
-) -> @location(0) vec4f {
-    let base_color = textureSample(postTexture, postSampler, uv);
+@compute @workgroup_size(8, 8, 1)
+fn cs_main(@builtin(global_invocation_id) gid: vec3u) {
+    let size = textureDimensions(ssrOutput);
+    if (gid.x >= size.x || gid.y >= size.y) {
+        return;
+    }
 
-    let pixel_i = vec2i(frag_coord.xy);
+    let pixel_i = vec2i(gid.xy);
     let pixel_u = vec2u(pixel_i);
+    let size_f = vec2f(size);
+    let uv = (vec2f(gid.xy) + vec2f(0.5)) / size_f;
+
+    let base_color = textureLoad(postTexture, pixel_i, 0);
+    var out_color = base_color;
 
     let depth = textureLoad(postDepth, pixel_i, 0);
     if (depth >= 0.9999) {
-        return base_color;
+        textureStore(ssrOutput, pixel_i, out_color);
+        return;
     }
 
     let normal_enc = textureLoad(postNormal, pixel_i, 0).xy;
@@ -99,13 +112,13 @@ fn fs_main(
 
     let material = textureLoad(postMaterial, pixel_i, 0);
     let roughness = saturate(material.x);
-    let metallic  = saturate(material.y);
+    let metallic = saturate(material.y);
 
-    let pixel_size = vec2f(1.0) / vec2f(system.screen);
+    let pixel_size = vec2f(1.0) / size_f;
 
     let world_pos = reconstruct_world(uv, depth);
-    let view_dir  = normalize(camera.position - world_pos);
-    let refl_dir  = normalize(reflect(-view_dir, normal));
+    let view_dir = normalize(camera.position - world_pos);
+    let refl_dir = normalize(reflect(-view_dir, normal));
 
     let r2 = roughness * roughness;
     let max_distance = mix(50.0, 12.0, r2);
@@ -113,10 +126,7 @@ fn fs_main(
     let max_steps = i32(steps_f);
     let step_size = max_distance / steps_f;
 
-    let origin =
-        world_pos +
-        normal * (0.01 + 0.05 * r2) +
-        refl_dir * step_size;
+    let origin = world_pos + normal * (0.01 + 0.05 * r2) + refl_dir * step_size;
 
     let clip_o = camera.view_proj_mat * vec4f(origin, 1.0);
     let clip_d = camera.view_proj_mat * vec4f(refl_dir, 0.0);
@@ -155,7 +165,7 @@ fn fs_main(
             continue;
         }
 
-        let scene_depth = textureLoad(postDepth, uv_to_pixel(sample_uv), 0);
+        let scene_depth = textureLoad(postDepth, uv_to_pixel(sample_uv, size_f), 0);
         if (scene_depth >= 0.9999) {
             t = t + step_size;
             has_prev = false;
@@ -191,7 +201,7 @@ fn fs_main(
                     continue;
                 }
 
-                let d = textureLoad(postDepth, uv_to_pixel(u), 0);
+                let d = textureLoad(postDepth, uv_to_pixel(u, size_f), 0);
                 if (d >= 0.9999) {
                     t0 = tm;
                     continue;
@@ -216,26 +226,29 @@ fn fs_main(
     }
 
     if (!hit) {
-        return base_color;
+        textureStore(ssrOutput, pixel_i, out_color);
+        return;
     }
 
-    let final_scene_depth = textureLoad(postDepth, uv_to_pixel(hit_uv), 0);
+    let final_scene_depth = textureLoad(postDepth, uv_to_pixel(hit_uv, size_f), 0);
     if (final_scene_depth >= 0.9999) {
-        return base_color;
+        textureStore(ssrOutput, pixel_i, out_color);
+        return;
     }
 
     let clip_hit = clip_o + clip_d * hit_t;
     if (clip_hit.w <= 0.0) {
-        return base_color;
+        textureStore(ssrOutput, pixel_i, out_color);
+        return;
     }
 
     let ndc_hit = clip_hit.xyz / clip_hit.w;
 
-    let ray_z   = depth_to_view_z(ndc_hit.z);
+    let ray_z = depth_to_view_z(ndc_hit.z);
     let scene_z = depth_to_view_z(final_scene_depth);
 
     let clip_prev = clip_o + clip_d * max(hit_t - step_size, 0.0);
-    let ndc_prev  = clip_prev.xyz / max(clip_prev.w, 1e-6);
+    let ndc_prev = clip_prev.xyz / max(clip_prev.w, 1e-6);
     let ray_z_prev = depth_to_view_z(ndc_prev.z);
 
     let step_z = abs(ray_z - ray_z_prev);
@@ -245,10 +258,9 @@ fn fs_main(
         (0.02 + 0.08 * r2) * (1.0 + 0.01 * ray_z);
 
     if (abs(scene_z - ray_z) > thickness_view) {
-        return base_color;
+        textureStore(ssrOutput, pixel_i, out_color);
+        return;
     }
-
-    // ---- Shade & combine ----
 
     let hit_color = sample_reflection(hit_uv, roughness, pixel_size);
 
@@ -263,6 +275,7 @@ fn fs_main(
     let fade_rough = (1.0 - roughness);
 
     let strength = saturate(spec * fade_edge * fade_dist * fade_rough * fade_rough);
+    out_color = vec4f(mix(base_color.rgb, hit_color.rgb, strength), base_color.a);
 
-    return vec4f(mix(base_color.rgb, hit_color.rgb, strength), base_color.a);
+    textureStore(ssrOutput, pixel_i, out_color);
 }

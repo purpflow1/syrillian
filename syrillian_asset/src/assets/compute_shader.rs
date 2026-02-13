@@ -1,0 +1,133 @@
+use crate::HComputeShader;
+use crate::store::{H, HandleName, Store, StoreDefaults, StoreType, StoreTypeFallback};
+use crate::{HBGL, store_add_checked};
+
+const COMPUTE_MESH_SKINNING: &str = include_str!("shader/shaders/compute/mesh_skinning.wgsl");
+const COMPUTE_POST_PROCESS_SSR: &str =
+    include_str!("shader/shaders/compute/ssr_post_process_compute.wgsl");
+const COMPUTE_PARTICLE_POSITION: &str =
+    include_str!("shader/shaders/compute/particle_position.wgsl");
+
+#[derive(Debug, Clone)]
+pub struct ComputeShader {
+    name: String,
+    code: String,
+    entry_point: String,
+    bind_group_layouts: Vec<HBGL>,
+}
+
+impl H<ComputeShader> {
+    pub const FALLBACK_ID: u32 = 0;
+    pub const MESH_SKINNING_ID: u32 = 1;
+    pub const POST_PROCESS_SSR_ID: u32 = 2;
+    pub const PARTICLE_POSITION_ID: u32 = 3;
+    pub const MAX_BUILTIN_ID: u32 = 3;
+
+    pub const FALLBACK: H<ComputeShader> = H::new(Self::FALLBACK_ID);
+    pub const MESH_SKINNING: H<ComputeShader> = H::new(Self::MESH_SKINNING_ID);
+    pub const POST_PROCESS_SSR: H<ComputeShader> = H::new(Self::POST_PROCESS_SSR_ID);
+    pub const PARTICLE_POSITION: H<ComputeShader> = H::new(Self::PARTICLE_POSITION_ID);
+}
+
+impl StoreDefaults for ComputeShader {
+    fn populate(store: &mut Store<Self>) {
+        store_add_checked!(
+            store,
+            HComputeShader::FALLBACK_ID,
+            ComputeShader::new(
+                "Compute Fallback",
+                "@compute @workgroup_size(1,1,1) fn cs_main() {}",
+                vec![]
+            )
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::MESH_SKINNING_ID,
+            ComputeShader::new(
+                "Mesh Skinning Compute",
+                COMPUTE_MESH_SKINNING,
+                vec![HBGL::MESH_SKINNING_COMPUTE]
+            )
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_SSR_ID,
+            ComputeShader::new(
+                "SSR Post Process Compute",
+                COMPUTE_POST_PROCESS_SSR,
+                vec![HBGL::RENDER, HBGL::POST_PROCESS_COMPUTE]
+            )
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::PARTICLE_POSITION_ID,
+            ComputeShader::new(
+                "Particle Position Compute",
+                COMPUTE_PARTICLE_POSITION,
+                vec![HBGL::PARTICLE_COMPUTE]
+            )
+        );
+    }
+}
+
+impl StoreType for ComputeShader {
+    const NAME: &str = "Compute Shader";
+
+    fn ident_fmt(handle: H<Self>) -> HandleName<Self> {
+        match handle.id() {
+            HComputeShader::FALLBACK_ID => HandleName::Static("Fallback Compute Shader"),
+            HComputeShader::MESH_SKINNING_ID => HandleName::Static("Mesh Skinning Compute Shader"),
+            HComputeShader::POST_PROCESS_SSR_ID => {
+                HandleName::Static("SSR Post Process Compute Shader")
+            }
+            HComputeShader::PARTICLE_POSITION_ID => {
+                HandleName::Static("Particle Position Compute Shader")
+            }
+            _ => HandleName::Id(handle),
+        }
+    }
+
+    fn is_builtin(handle: H<Self>) -> bool {
+        handle.id() <= HComputeShader::MAX_BUILTIN_ID
+    }
+}
+
+impl StoreTypeFallback for ComputeShader {
+    fn fallback() -> H<Self> {
+        HComputeShader::FALLBACK
+    }
+}
+
+impl ComputeShader {
+    pub fn new(
+        name: impl Into<String>,
+        code: impl Into<String>,
+        bind_group_layouts: Vec<HBGL>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            code: code.into(),
+            entry_point: "cs_main".to_string(),
+            bind_group_layouts,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    pub fn entry_point(&self) -> &str {
+        &self.entry_point
+    }
+
+    pub fn bind_group_layouts(&self) -> &[HBGL] {
+        &self.bind_group_layouts
+    }
+}

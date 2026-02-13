@@ -13,6 +13,7 @@ macro_rules! test_shader {
     };
 }
 
+#[allow(unused)]
 macro_rules! test_post_shader {
     ($fn_name:ident, $name:literal => $path:literal) => {
         #[test]
@@ -70,15 +71,12 @@ test_custom_shader!(debug_text2d, "Debug Text 2D Geometry Shader" => "debug/text
 test_custom_shader!(debug_text3d, "Debug Text 3D Geometry Shader" => "debug/text3d_geometry.wgsl");
 test_custom_shader!(debug_light, "Debug Light Geometry Shader" => "debug/light.wgsl");
 
-// Post-Processing Shaders
-test_post_shader!(ssr_post_process, "SSR Post Process Shader" => "ssr_post_process.wgsl");
-
 #[test]
 fn fullscreen_passthrough() {
     use crate::Shader;
     use crate::shader::checks::validate_wgsl_source;
+    use syrillian_shadergen::PostProcessCompiler;
     use syrillian_shadergen::function::PostProcessPassthroughMaterial;
-    use syrillian_shadergen::generator::PostProcessCompiler;
 
     let material = PostProcessPassthroughMaterial;
     let fs = PostProcessCompiler::compile_post_process_fragment(&material, 0);
@@ -94,11 +92,12 @@ fn shadergen_mesh3d() {
     use crate::Shader;
     use crate::shader::checks::validate_wgsl_source;
     use crate::shader::{ShaderCode, ShaderType};
+    use syrillian_shadergen::MaterialCompiler;
     use syrillian_shadergen::function::PbrShader;
-    use syrillian_shadergen::generator::{MaterialCompiler, MeshPass, MeshSkinning};
+    use syrillian_shadergen::generator::MeshPass;
 
     let mut pbr = PbrShader::default();
-    let code = MaterialCompiler::compile_mesh(&mut pbr, 0, MeshSkinning::Unskinned, MeshPass::Base);
+    let code = MaterialCompiler::compile_mesh(&mut pbr, 0, MeshPass::Base);
     let shader = Shader::builder()
         .shader_type(ShaderType::Custom)
         .name("Shadergen Mesh3D")

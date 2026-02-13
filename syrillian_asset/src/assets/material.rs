@@ -3,7 +3,6 @@ use crate::material_inputs::{MaterialImmediateDef, MaterialInputLayout, Material
 use crate::store::{H, HandleName, Store, StoreDefaults, StoreType, StoreTypeFallback};
 use crate::{MaterialShaderSet, store_add_checked};
 use glamx::Vec3;
-use syrillian_shadergen::generator::MeshSkinning;
 use syrillian_shadergen::value::{MaterialValue, MaterialValueType};
 
 #[derive(Debug, Clone)]
@@ -22,8 +21,7 @@ pub struct FallbackMaterial {
 pub struct CustomMaterial {
     name: String,
     layout: MaterialInputLayout,
-    shader_unskinned: MaterialShaderSet,
-    shader_skinned: MaterialShaderSet,
+    shader_set: MaterialShaderSet,
 }
 
 #[derive(Debug, Clone)]
@@ -55,14 +53,12 @@ impl CustomMaterial {
     pub fn new(
         name: impl Into<String>,
         layout: MaterialInputLayout,
-        shader_unskinned: MaterialShaderSet,
-        shader_skinned: MaterialShaderSet,
+        shader_set: MaterialShaderSet,
     ) -> Self {
         Self {
             name: name.into(),
             layout,
-            shader_unskinned,
-            shader_skinned,
+            shader_set,
         }
     }
 
@@ -74,8 +70,7 @@ impl CustomMaterial {
         Self {
             name: name.into(),
             layout,
-            shader_unskinned: shader_set,
-            shader_skinned: shader_set,
+            shader_set,
         }
     }
 }
@@ -97,29 +92,19 @@ impl Material {
         }
     }
 
-    pub fn shader_set(&self, skinning: MeshSkinning) -> MaterialShaderSet {
+    pub fn shader_set(&self) -> MaterialShaderSet {
         match self {
-            Material::Default(_) => match skinning {
-                MeshSkinning::Skinned => MaterialShaderSet {
-                    base: HShader::DIM3_SKINNED,
-                    picking: HShader::DIM3_PICKING_SKINNED,
-                    shadow: HShader::DIM3_SHADOW_SKINNED,
-                },
-                MeshSkinning::Unskinned => MaterialShaderSet {
-                    base: HShader::DIM3,
-                    picking: HShader::DIM3_PICKING,
-                    shadow: HShader::DIM3_SHADOW,
-                },
+            Material::Default(_) => MaterialShaderSet {
+                base: HShader::DIM3,
+                picking: HShader::DIM3_PICKING,
+                shadow: HShader::DIM3_SHADOW,
             },
             Material::Fallback(_) => MaterialShaderSet {
                 base: HShader::FALLBACK,
                 picking: HShader::DIM3_PICKING,
                 shadow: HShader::DIM3_SHADOW,
             },
-            Material::Custom(m) => match skinning {
-                MeshSkinning::Skinned => m.shader_skinned,
-                MeshSkinning::Unskinned => m.shader_unskinned,
-            },
+            Material::Custom(m) => m.shader_set,
         }
     }
 

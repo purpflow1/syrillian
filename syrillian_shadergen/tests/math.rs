@@ -1,6 +1,6 @@
+use syrillian_shadergen::PostProcessCompiler;
 use syrillian_shadergen::chunks::NodeId;
 use syrillian_shadergen::function::{MaterialExpressionValue, PostProcessMaterialExpression};
-use syrillian_shadergen::generator::PostProcessCompiler;
 use syrillian_shadergen::value::MaterialValueType;
 
 struct MathTestMaterial;

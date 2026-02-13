@@ -3,7 +3,9 @@
 //! For more information please see module level documentation.
 
 use crate::cache::generic_cache::Cache;
-use crate::cache::{FontAtlas, GpuTexture, RuntimeMaterial, RuntimeMesh, RuntimeShader};
+use crate::cache::{
+    FontAtlas, GpuTexture, RuntimeComputeShader, RuntimeMaterial, RuntimeMesh, RuntimeShader,
+};
 use crate::rendering::state::State;
 use dashmap::DashMap;
 use parking_lot::Mutex;
@@ -17,6 +19,7 @@ use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, Device};
 pub struct AssetCache {
     pub meshes: Cache<Mesh>,
     pub shaders: Cache<Shader>,
+    pub compute_shaders: Cache<ComputeShader>,
     pub textures: Cache<Texture2D>,
     pub texture_arrays: Cache<Texture2DArray>,
     pub cubemaps: Cache<Cubemap>,
@@ -41,6 +44,11 @@ impl AssetCache {
         Self {
             meshes: Cache::new(store.meshes.clone(), device.clone(), queue.clone()),
             shaders: Cache::new(store.shaders.clone(), device.clone(), queue.clone()),
+            compute_shaders: Cache::new(
+                store.compute_shaders.clone(),
+                device.clone(),
+                queue.clone(),
+            ),
             textures: Cache::new(store.textures.clone(), device.clone(), queue.clone()),
             texture_arrays: Cache::new(store.texture_arrays.clone(), device.clone(), queue.clone()),
             cubemaps: Cache::new(store.cubemaps.clone(), device.clone(), queue.clone()),
@@ -91,6 +99,10 @@ impl AssetCache {
         self.shaders.get(handle, self).clone()
     }
 
+    pub fn compute_shader(&self, handle: HComputeShader) -> Arc<RuntimeComputeShader> {
+        self.compute_shaders.get(handle, self)
+    }
+
     pub fn shader_3d(&self) -> Arc<RuntimeShader> {
         self.shaders.get(HShader::DIM3, self)
     }
@@ -101,10 +113,6 @@ impl AssetCache {
 
     pub fn shader_post_process(&self) -> Arc<RuntimeShader> {
         self.shaders.get(HShader::POST_PROCESS, self)
-    }
-
-    pub fn shader_post_process_ssr(&self) -> Arc<RuntimeShader> {
-        self.shaders.get(HShader::POST_PROCESS_SSR, self)
     }
 
     pub fn texture(&self, handle: HTexture2D) -> Arc<GpuTexture> {
@@ -192,6 +200,24 @@ impl AssetCache {
             .expect("Post Process is a default layout")
     }
 
+    pub fn bgl_post_process_compute(&self) -> BindGroupLayout {
+        self.bgls
+            .try_get(HBGL::POST_PROCESS_COMPUTE, self)
+            .expect("Post Process Compute is a default layout")
+    }
+
+    pub fn bgl_mesh_skinning_compute(&self) -> BindGroupLayout {
+        self.bgls
+            .try_get(HBGL::MESH_SKINNING_COMPUTE, self)
+            .expect("Mesh Skinning Compute is a default layout")
+    }
+
+    pub fn bgl_particle_compute(&self) -> BindGroupLayout {
+        self.bgls
+            .try_get(HBGL::PARTICLE_COMPUTE, self)
+            .expect("Particle Compute is a default layout")
+    }
+
     pub fn material_layout(&self, layout: &MaterialInputLayout) -> BindGroupLayout {
         let key = layout.layout_key();
         if let Some(existing) = self.material_layouts.get(&key) {
@@ -218,6 +244,7 @@ impl AssetCache {
 
         refreshed_count += self.meshes.refresh_dirty();
         refreshed_count += self.shaders.refresh_dirty();
+        refreshed_count += self.compute_shaders.refresh_dirty();
         refreshed_count += self.material_instances.refresh_dirty();
         refreshed_count += self.textures.refresh_dirty();
         refreshed_count += self.texture_arrays.refresh_dirty();
@@ -246,6 +273,12 @@ impl AsRef<Store<Mesh>> for AssetCache {
 impl AsRef<Store<Shader>> for AssetCache {
     fn as_ref(&self) -> &Store<Shader> {
         self.shaders.store()
+    }
+}
+
+impl AsRef<Store<ComputeShader>> for AssetCache {
+    fn as_ref(&self) -> &Store<ComputeShader> {
+        self.compute_shaders.store()
     }
 }
 

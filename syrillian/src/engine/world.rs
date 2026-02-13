@@ -19,8 +19,8 @@ use std::collections::{HashMap, HashSet};
 use std::mem::{swap, take};
 use std::path::PathBuf;
 use std::sync::Arc;
-use syrillian_asset::AssetStore;
 use syrillian_asset::store::Store;
+use syrillian_asset::{AssetStore, ComputeShader};
 use syrillian_asset::{
     BGL, Cubemap, Material, MaterialInstance, Mesh, RenderCubemap, RenderTexture2D,
     RenderTexture2DArray, Shader, Sound, Texture2D, Texture2DArray,
@@ -1078,6 +1078,12 @@ impl AsRef<Store<Mesh>> for World {
 impl AsRef<Store<Shader>> for World {
     fn as_ref(&self) -> &Store<Shader> {
         &self.assets.shaders
+    }
+}
+
+impl AsRef<Store<ComputeShader>> for World {
+    fn as_ref(&self) -> &Store<ComputeShader> {
+        &self.assets.compute_shaders
     }
 }
 

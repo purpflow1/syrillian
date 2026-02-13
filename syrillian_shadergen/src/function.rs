@@ -1,5 +1,6 @@
-use crate::chunks::{ExpressionInput as ChunkInput, NodeId};
-use crate::generator::{MaterialCompiler, PostProcessCompiler};
+use crate::MaterialCompiler;
+use crate::chunks::{NodeExpressionInput as ChunkInput, NodeId};
+use crate::compiler::PostProcessCompiler;
 use crate::value::MaterialValueType;
 use glamx::{Vec2, Vec3, Vec4};
 use std::marker::PhantomData;

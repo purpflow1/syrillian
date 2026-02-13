@@ -1,12 +1,14 @@
 pub type NodeId = u32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct ExpressionInput {
+pub(crate) struct NodeExpressionInput {
     node: NodeId,
     output_index: u32,
 }
 
-impl ExpressionInput {
+use NodeExpressionInput as ExpressionInput;
+
+impl NodeExpressionInput {
     pub const fn new(node: NodeId, output_index: u32) -> Self {
         Self { node, output_index }
     }

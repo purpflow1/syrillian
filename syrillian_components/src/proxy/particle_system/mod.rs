@@ -1,12 +1,19 @@
+// TODO: refactor
+
 use crate::particle_system::ParticleSystemSettings;
 use bytemuck::bytes_of;
 use std::any::Any;
+use std::mem::size_of;
 use std::time::Instant;
 use syrillian::assets::defaults::DEFAULT_COLOR_TARGETS;
 use syrillian::assets::store::StoreType;
-use syrillian::assets::{AssetStore, HShader, Shader, ShaderCode, ShaderType};
+use syrillian::assets::{AssetStore, HComputeShader, HShader, Shader, ShaderCode, ShaderType};
 use syrillian::math::{Affine3A, Vec3};
-use syrillian::wgpu::PrimitiveTopology;
+use syrillian::syrillian_macros::UniformIndex;
+use syrillian::wgpu::{
+    BufferDescriptor, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor,
+    PrimitiveTopology, VertexAttribute, VertexBufferLayout, VertexFormat, VertexStepMode,
+};
 use syrillian_render::proxies::{
     PROXY_PRIORITY_SOLID, PROXY_PRIORITY_TRANSPARENT, SceneProxy, SceneProxyBinding,
 };
@@ -45,6 +52,15 @@ impl ShaderUniformIndex for ParticleUniformIndex {
 
 impl ShaderUniformMultiIndex for ParticleUniformIndex {}
 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, UniformIndex)]
+pub enum ParticleComputeUniformIndex {
+    Settings = 0,
+    Runtime = 1,
+    Output = 2,
+    Dispatch = 3,
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ParticleSystemUniform {
@@ -74,10 +90,54 @@ pub struct ParticleRuntimeUniform {
     pub data: [f32; 4],
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ParticleVertex {
+    pub world_pos_alive: [f32; 4],
+    pub life_t: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ParticleDispatchUniform {
+    pub start_index: u32,
+    pub chunk_count: u32,
+    pub total_count: u32,
+    pub _pad0: u32,
+}
+
+const PARTICLE_VERTEX_LAYOUT: &[VertexBufferLayout] = &[VertexBufferLayout {
+    array_stride: size_of::<ParticleVertex>() as u64,
+    step_mode: VertexStepMode::Vertex,
+    attributes: &[
+        VertexAttribute {
+            format: VertexFormat::Float32x4,
+            offset: 0,
+            shader_location: 0,
+        },
+        VertexAttribute {
+            format: VertexFormat::Float32,
+            offset: 16,
+            shader_location: 1,
+        },
+    ],
+}];
+
+#[derive(Debug)]
+struct ParticleChunkGpu {
+    compute_uniform: ShaderUniform<ParticleComputeUniformIndex>,
+    particle_buffer: syrillian::wgpu::Buffer,
+    count: u32,
+}
+
 #[derive(Debug)]
 pub struct ParticleSystemGpuData {
     shader: HShader,
-    uniform: ShaderUniform<ParticleUniformIndex>,
+    render_uniform: ShaderUniform<ParticleUniformIndex>,
+    chunks: Vec<ParticleChunkGpu>,
     runtime: ParticleRuntimeUniform,
 }
 
@@ -89,7 +149,7 @@ pub struct ParticleSystemProxy {
 }
 
 impl ParticleSystemUniform {
-    pub fn new(settings: ParticleSystemSettings, particle_count: u32) -> Self {
+    pub fn new(settings: &ParticleSystemSettings, particle_count: u32) -> Self {
         let vec3 = |v: Vec3| [v.x, v.y, v.z, 0.0];
         Self {
             position: vec3(settings.position),
@@ -152,26 +212,80 @@ impl SceneProxy for ParticleSystemProxy {
             .name("Particle System")
             .color_target(DEFAULT_COLOR_TARGETS)
             .shader_type(ShaderType::Custom)
-            .vertex_buffers(&[])
+            .vertex_buffers(PARTICLE_VERTEX_LAYOUT)
             .topology(PrimitiveTopology::PointList)
             .code(ShaderCode::Full(
-                include_str!("particle_system_shader.wgsl").to_string(),
+                include_str!("particle_system_render.wgsl").to_string(),
             ))
             .build()
             .store(store);
 
-        let settings = ParticleSystemUniform::new(self.settings, self.particle_count);
+        let settings = ParticleSystemUniform::new(&self.settings, self.particle_count);
         let runtime = ParticleRuntimeUniform::const_default();
-        let uniform = ShaderUniform::<ParticleUniformIndex>::builder(renderer.cache.bgl_model())
-            .with_buffer_data(&settings)
-            .with_buffer_data(&runtime)
+
+        let render_uniform =
+            ShaderUniform::<ParticleUniformIndex>::builder(renderer.cache.bgl_model())
+                .with_buffer_data(&settings)
+                .with_buffer_data(&runtime)
+                .build(&renderer.state.device);
+        let limits = renderer.state.device.limits();
+        let max_storage_binding = limits.max_storage_buffer_binding_size as u64;
+        let max_buffer_size = limits.max_buffer_size;
+        let chunk_byte_limit = max_storage_binding.min(max_buffer_size).max(4);
+        let max_particles_by_buffer =
+            (chunk_byte_limit / size_of::<ParticleVertex>() as u64).max(1) as u32;
+        let max_particles_by_dispatch = limits
+            .max_compute_workgroups_per_dimension
+            .saturating_mul(64)
+            .max(1);
+        let max_particles_per_chunk = max_particles_by_buffer.min(max_particles_by_dispatch);
+
+        let mut chunks = Vec::new();
+        let mut start = 0u32;
+        while start < self.particle_count {
+            let count = (self.particle_count - start).min(max_particles_per_chunk);
+            let particle_buffer_size = ((count as u64) * size_of::<ParticleVertex>() as u64).max(4);
+            let particle_buffer = renderer.state.device.create_buffer(&BufferDescriptor {
+                label: Some("Particle Compute Vertex Buffer"),
+                size: particle_buffer_size,
+                usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            let dispatch = ParticleDispatchUniform {
+                start_index: start,
+                chunk_count: count,
+                total_count: self.particle_count,
+                _pad0: 0,
+            };
+
+            let compute_uniform = ShaderUniform::<ParticleComputeUniformIndex>::builder(
+                renderer.cache.bgl_particle_compute(),
+            )
+            .with_buffer(
+                render_uniform
+                    .buffer(ParticleUniformIndex::Settings)
+                    .clone(),
+            )
+            .with_buffer(render_uniform.buffer(ParticleUniformIndex::Runtime).clone())
+            .with_storage_buffer(particle_buffer.clone())
+            .with_buffer_data(&dispatch)
             .build(&renderer.state.device);
+
+            chunks.push(ParticleChunkGpu {
+                compute_uniform,
+                particle_buffer,
+                count,
+            });
+            start += count;
+        }
 
         self.start_time = Instant::now();
 
         Box::new(ParticleSystemGpuData {
             shader,
-            uniform,
+            render_uniform,
+            chunks,
             runtime,
         })
     }
@@ -191,19 +305,46 @@ impl SceneProxy for ParticleSystemProxy {
         _local_to_world: &Affine3A,
     ) {
         let data: &mut ParticleSystemGpuData = proxy_data_mut!(data);
-        let settings = ParticleSystemUniform::new(self.settings, self.particle_count);
+        let settings = ParticleSystemUniform::new(&self.settings, self.particle_count);
         renderer.state.queue.write_buffer(
-            data.uniform.buffer(ParticleUniformIndex::Settings),
+            data.render_uniform.buffer(ParticleUniformIndex::Settings),
             0,
             bytes_of(&settings),
         );
 
         data.runtime.data[0] = self.start_time.elapsed().as_secs_f32();
         renderer.state.queue.write_buffer(
-            data.uniform.buffer(ParticleUniformIndex::Runtime),
+            data.render_uniform.buffer(ParticleUniformIndex::Runtime),
             0,
             bytes_of(&data.runtime),
         );
+
+        let mut encoder = renderer
+            .state
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("Particle Compute Encoder"),
+            });
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Particle Position Compute Pass"),
+                ..ComputePassDescriptor::default()
+            });
+
+            let shader = renderer
+                .cache
+                .compute_shader(HComputeShader::PARTICLE_POSITION);
+            pass.set_pipeline(shader.pipeline());
+            for chunk in &data.chunks {
+                if chunk.count == 0 {
+                    continue;
+                }
+                pass.set_bind_group(0, chunk.compute_uniform.bind_group(), &[]);
+                pass.dispatch_workgroups(chunk.count.div_ceil(64), 1, 1);
+            }
+        }
+
+        renderer.state.queue.submit(Some(encoder.finish()));
     }
 
     fn render(&self, renderer: &Renderer, ctx: &GPUDrawCtx, binding: &SceneProxyBinding) {
@@ -220,10 +361,16 @@ impl SceneProxy for ParticleSystemProxy {
             return;
         }
         if let Some(idx) = shader.bind_groups().model {
-            pass.set_bind_group(idx, data.uniform.bind_group(), &[]);
+            pass.set_bind_group(idx, data.render_uniform.bind_group(), &[]);
         }
 
-        pass.draw(0..1, 0..self.particle_count);
+        for chunk in &data.chunks {
+            if chunk.count == 0 {
+                continue;
+            }
+            pass.set_vertex_buffer(0, chunk.particle_buffer.slice(..));
+            pass.draw(0..chunk.count, 0..1);
+        }
     }
 
     fn priority(&self, _store: &AssetStore) -> u32 {

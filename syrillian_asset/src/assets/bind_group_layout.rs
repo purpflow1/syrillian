@@ -2,7 +2,7 @@ use crate::store::{H, HandleName, Store, StoreDefaults, StoreType};
 use crate::{HBGL, store_add_checked};
 use wgpu::{
     BindGroupLayoutEntry, BindingType, BufferBindingType, SamplerBindingType, ShaderStages,
-    TextureSampleType, TextureViewDimension,
+    StorageTextureAccess, TextureFormat, TextureSampleType, TextureViewDimension,
 };
 
 #[derive(Clone, Debug)]
@@ -19,8 +19,11 @@ impl HBGL {
     pub const SHADOW_ID: u32 = 4;
     pub const POST_PROCESS_ID: u32 = 5;
     pub const EMPTY_ID: u32 = 6;
+    pub const POST_PROCESS_COMPUTE_ID: u32 = 7;
+    pub const MESH_SKINNING_COMPUTE_ID: u32 = 8;
+    pub const PARTICLE_COMPUTE_ID: u32 = 9;
 
-    const MAX_BUILTIN_ID: u32 = 6;
+    const MAX_BUILTIN_ID: u32 = 9;
 
     pub const RENDER: HBGL = HBGL::new(Self::RENDER_ID);
     pub const MODEL: HBGL = HBGL::new(Self::MODEL_ID);
@@ -29,6 +32,9 @@ impl HBGL {
     pub const SHADOW: HBGL = HBGL::new(Self::SHADOW_ID);
     pub const POST_PROCESS: HBGL = HBGL::new(Self::POST_PROCESS_ID);
     pub const EMPTY: HBGL = HBGL::new(Self::EMPTY_ID);
+    pub const POST_PROCESS_COMPUTE: HBGL = HBGL::new(Self::POST_PROCESS_COMPUTE_ID);
+    pub const MESH_SKINNING_COMPUTE: HBGL = HBGL::new(Self::MESH_SKINNING_COMPUTE_ID);
+    pub const PARTICLE_COMPUTE: HBGL = HBGL::new(Self::PARTICLE_COMPUTE_ID);
 }
 
 impl StoreType for BGL {
@@ -42,6 +48,13 @@ impl StoreType for BGL {
             HBGL::LIGHT_ID => HandleName::Static("Light Bind Group Layout"),
             HBGL::SHADOW_ID => HandleName::Static("Shadow Bind Group Layout"),
             HBGL::POST_PROCESS_ID => HandleName::Static("Post Process Bind Group Layout"),
+            HBGL::POST_PROCESS_COMPUTE_ID => {
+                HandleName::Static("Post Process Compute Bind Group Layout")
+            }
+            HBGL::MESH_SKINNING_COMPUTE_ID => {
+                HandleName::Static("Mesh Skinning Compute Bind Group Layout")
+            }
+            HBGL::PARTICLE_COMPUTE_ID => HandleName::Static("Particle Compute Bind Group Layout"),
             _ => HandleName::Id(handle),
         }
     }
@@ -54,7 +67,7 @@ impl StoreType for BGL {
 const RENDER_ENTRIES: [BindGroupLayoutEntry; 2] = [
     BindGroupLayoutEntry {
         binding: 0,
-        visibility: ShaderStages::VERTEX_FRAGMENT,
+        visibility: ShaderStages::all(),
         ty: BindingType::Buffer {
             ty: BufferBindingType::Uniform,
             has_dynamic_offset: false,
@@ -64,7 +77,7 @@ const RENDER_ENTRIES: [BindGroupLayoutEntry; 2] = [
     },
     BindGroupLayoutEntry {
         binding: 1,
-        visibility: ShaderStages::VERTEX_FRAGMENT,
+        visibility: ShaderStages::all(),
         ty: BindingType::Buffer {
             ty: BufferBindingType::Uniform,
             has_dynamic_offset: false,
@@ -216,6 +229,151 @@ const PP_ENTRIES: [BindGroupLayoutEntry; 5] = [
     },
 ];
 
+const PP_COMPUTE_ENTRIES: [BindGroupLayoutEntry; 6] = [
+    BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: true },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 1,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Depth,
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 3,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: false },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 4,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: false },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 5,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::StorageTexture {
+            access: StorageTextureAccess::WriteOnly,
+            format: TextureFormat::Rgba8Unorm,
+            view_dimension: TextureViewDimension::D2,
+        },
+        count: None,
+    },
+];
+
+const MESH_SKINNING_COMPUTE_ENTRIES: [BindGroupLayoutEntry; 4] = [
+    BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 1,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 3,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Storage { read_only: false },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+];
+
+const PARTICLE_COMPUTE_ENTRIES: [BindGroupLayoutEntry; 4] = [
+    BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 1,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Storage { read_only: false },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 3,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+];
+
 impl StoreDefaults for BGL {
     fn populate(store: &mut Store<Self>) {
         store_add_checked!(
@@ -278,6 +436,33 @@ impl StoreDefaults for BGL {
             BGL {
                 label: "".to_string(),
                 entries: [].to_vec()
+            }
+        );
+
+        store_add_checked!(
+            store,
+            HBGL::POST_PROCESS_COMPUTE_ID,
+            BGL {
+                label: HBGL::POST_PROCESS_COMPUTE.ident(),
+                entries: PP_COMPUTE_ENTRIES.to_vec()
+            }
+        );
+
+        store_add_checked!(
+            store,
+            HBGL::MESH_SKINNING_COMPUTE_ID,
+            BGL {
+                label: HBGL::MESH_SKINNING_COMPUTE.ident(),
+                entries: MESH_SKINNING_COMPUTE_ENTRIES.to_vec()
+            }
+        );
+
+        store_add_checked!(
+            store,
+            HBGL::PARTICLE_COMPUTE_ID,
+            BGL {
+                label: HBGL::PARTICLE_COMPUTE.ident(),
+                entries: PARTICLE_COMPUTE_ENTRIES.to_vec()
             }
         );
     }

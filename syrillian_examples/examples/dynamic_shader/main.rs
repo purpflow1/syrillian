@@ -27,7 +27,7 @@ use web_time::Instant;
 const SHADER_PATH: &str = "examples/dynamic_shader/shader.wgsl";
 const DEFAULT_VERT: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../syrillian_shadergen/src/functions/vertex_mesh3d_bones.wgsl"
+    "/../syrillian_shadergen/src/functions/vertex_mesh3d.wgsl"
 ));
 
 #[derive(SyrillianApp)]
@@ -93,31 +93,24 @@ impl DynamicShaderExample {
                 .set_code(source_2);
         }
 
-        let unskinned = MaterialShaderSet {
+        let shader_set = MaterialShaderSet {
             base: self.shader_id,
             picking: HShader::DIM3_PICKING,
             shadow: HShader::DIM3_SHADOW,
-        };
-        let skinned = MaterialShaderSet {
-            base: self.shader_id,
-            picking: HShader::DIM3_PICKING_SKINNED,
-            shadow: HShader::DIM3_SHADOW_SKINNED,
         };
 
         if self.material_def == HMaterial::FALLBACK {
             self.material_def = Material::Custom(CustomMaterial::new(
                 "Dynamic Shader Material",
                 Material::default_layout(),
-                unskinned,
-                skinned,
+                shader_set,
             ))
             .store(world);
         } else if let Some(mut mat) = world.assets.materials.try_get_mut(self.material_def) {
             *mat = Material::Custom(CustomMaterial::new(
                 "Dynamic Shader Material",
                 Material::default_layout(),
-                unskinned,
-                skinned,
+                shader_set,
             ));
         }
 
