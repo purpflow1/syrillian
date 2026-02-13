@@ -51,6 +51,7 @@ pub mod rigid_body;
 pub mod rotate;
 pub mod skeletal;
 pub mod text;
+pub mod third_person_controller;
 
 pub mod extensions;
 pub mod prefabs;
@@ -77,3 +78,4 @@ pub use rigid_body::RigidBodyComponent;
 pub use rotate::RotateComponent;
 pub use skeletal::SkeletalComponent;
 pub use text::Text3D;
+pub use third_person_controller::ThirdPersonCharacterController;
