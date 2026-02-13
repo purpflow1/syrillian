@@ -48,7 +48,7 @@ pub struct MeshSceneProxy {
     pub bone_data: BoneData,
     pub bones_dirty: bool,
     pub skinned: bool,
-    pub bounding: BoundingSphere,
+    pub bounding: Option<BoundingSphere>,
 }
 
 impl RuntimeMeshData {
@@ -177,7 +177,8 @@ impl SceneProxy for MeshSceneProxy {
     }
 
     fn bounds(&self, local_to_world: &Affine3A) -> Option<BoundingSphere> {
-        Some(self.bounding.transformed(&(*local_to_world).into()))
+        self.bounding
+            .map(|b| b.transformed(&(*local_to_world).into()))
     }
 }
 

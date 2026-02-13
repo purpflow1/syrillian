@@ -52,7 +52,7 @@ impl Component for MeshRenderer {
             bone_data: BoneData::new_full_identity(),
             bones_dirty: false,
             skinned: !mesh.bones.is_empty(),
-            bounding: mesh.bounding_sphere,
+            bounding: mesh.bones.is_empty().then_some(mesh.bounding_sphere),
         }))
     }
 
@@ -88,7 +88,7 @@ impl Component for MeshRenderer {
             ctx.send_proxy_update(move |sc| {
                 let data: &mut MeshSceneProxy = proxy_data_mut!(sc);
                 data.mesh = h_mesh;
-                data.bounding = bounds;
+                data.bounding = (!skinned).then_some(bounds);
                 data.skinned = skinned;
             })
         }
