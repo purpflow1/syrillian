@@ -1,4 +1,4 @@
-use glamx::{Mat4, Vec3};
+use glamx::Vec3;
 use num_enum::TryFromPrimitive;
 use syrillian_asset::ensure_aligned;
 use syrillian_macros::UniformIndex;
@@ -16,9 +16,12 @@ pub struct LightProxy {
     pub intensity: f32,
     pub inner_angle: f32,
     pub outer_angle: f32,
+    pub cos_inner: f32,
+    pub cos_outer: f32,
     pub type_id: u32, // LightType
     pub shadow_map_id: u32,
-    pub view_mat: Mat4,
+    pub shadow_mat_base: u32,
+    pub _p1: u32,
 }
 
 impl LightProxy {
@@ -34,14 +37,17 @@ impl LightProxy {
             intensity: 1000.0,
             inner_angle: 0.0,
             outer_angle: 0.0,
+            cos_inner: 1.0,
+            cos_outer: 1.0,
             type_id: LightType::Point as u32,
-            shadow_map_id: 0,
-            view_mat: Mat4::IDENTITY,
+            shadow_map_id: u32::MAX,
+            shadow_mat_base: u32::MAX,
+            _p1: 0,
         }
     }
 }
 
-ensure_aligned!(LightProxy { position, up, direction, color, view_mat }, align <= 16 * 9 => size);
+ensure_aligned!(LightProxy { position, up, direction, color }, align <= 16 * 6 => size);
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, TryFromPrimitive)]
@@ -63,4 +69,6 @@ pub enum LightUniformIndex {
 pub enum ShadowUniformIndex {
     ShadowMaps = 0,
     ShadowSampler = 1,
+    ShadowMatrices = 2,
+    ShadowTexel = 3,
 }

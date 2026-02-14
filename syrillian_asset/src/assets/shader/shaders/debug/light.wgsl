@@ -63,7 +63,6 @@ fn calculate_point_dir(iid: u32) -> vec3<f32> {
     return DIRS[iid];
 }
 
-// Spot Light
 fn calculate_spot_offset(light: Light, vid: u32, iid: u32) -> vec3<f32> {
     let dir = normalize(light.direction);
 
@@ -74,22 +73,14 @@ fn calculate_spot_offset(light: Light, vid: u32, iid: u32) -> vec3<f32> {
     let T = normalize(cross(dir, up));
     let B = cross(dir, T);
 
-    // Treat angles as radians; keep them sane.
     let inner = min(light.inner_angle, light.outer_angle);
     let outer = max(light.inner_angle, light.outer_angle);
 
-    // Center ray
     let r_in  = tan(inner) * light.range;
     let r_out = tan(outer) * light.range;
 
-    // Instance mapping (expect exactly 9 instances for SPOT):
-    // 0   -> center ray along `dir`
-    // 1..4 -> inner-cone cardinals: +T, -T, +B, -B
-    // 5..8 -> outer-cone cardinals: +T, -T, +B, -B
-
-    // Choose ring and axis for cardinals
     let use_outer = iid >= 5u;
-    let k = select(iid - 1u, iid - 5u, use_outer); // 0..3 expected
+    let k = select(iid - 1u, iid - 5u, use_outer);
 
     var axis: vec3<f32>;
     if k == 0u { axis =  T; }

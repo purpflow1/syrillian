@@ -43,12 +43,22 @@ pub trait Light: Component {
 
     fn set_inner_angle(&mut self, angle: f32) {
         let rad = angle.clamp(f32::EPSILON, 45. - f32::EPSILON).to_radians();
-        self.data_mut(true).inner_angle = rad;
+        let light = self.data_mut(true);
+        light.inner_angle = rad;
+        let inner = light.inner_angle.min(light.outer_angle);
+        let outer = light.inner_angle.max(light.outer_angle);
+        light.cos_inner = inner.cos();
+        light.cos_outer = outer.cos();
     }
 
     fn set_outer_angle(&mut self, angle: f32) {
         let rad = angle.clamp(f32::EPSILON, 45. - f32::EPSILON).to_radians();
-        self.data_mut(true).outer_angle = rad;
+        let light = self.data_mut(true);
+        light.outer_angle = rad;
+        let inner = light.inner_angle.min(light.outer_angle);
+        let outer = light.inner_angle.max(light.outer_angle);
+        light.cos_inner = inner.cos();
+        light.cos_outer = outer.cos();
     }
 
     fn radius(&self) -> f32 {
@@ -143,6 +153,8 @@ impl LightTypeTrait for Sun {
         light.color = vec3(1.0, 0.95, 0.72);
         light.inner_angle = *inner_angle;
         light.outer_angle = *outer_angle;
+        light.cos_inner = light.inner_angle.min(light.outer_angle).cos();
+        light.cos_outer = light.inner_angle.max(light.outer_angle).cos();
     }
 }
 
@@ -160,6 +172,8 @@ impl LightTypeTrait for Point {
         light.intensity = 1000.0;
         light.inner_angle = *inner_angle;
         light.outer_angle = *outer_angle;
+        light.cos_inner = light.inner_angle.min(light.outer_angle).cos();
+        light.cos_outer = light.inner_angle.max(light.outer_angle).cos();
     }
 }
 
@@ -176,6 +190,8 @@ impl LightTypeTrait for Spot {
         *outer_angle = 30.0f32.to_radians();
         light.inner_angle = 5.0f32.to_radians();
         light.outer_angle = 30.0f32.to_radians();
+        light.cos_inner = light.inner_angle.min(light.outer_angle).cos();
+        light.cos_outer = light.inner_angle.max(light.outer_angle).cos();
         light.range = 100.0;
         light.intensity = 1000.0;
     }
@@ -217,7 +233,6 @@ impl<L: LightTypeTrait + 'static> Component for LightComponent<L> {
         self.local_proxy.position = parent.transform.position();
         self.local_proxy.direction = parent.transform.forward();
         self.local_proxy.up = parent.transform.up();
-        self.local_proxy.view_mat = parent.transform.view_matrix_rigid().to_mat4();
     }
 
     fn late_update(&mut self, world: &mut World) {
@@ -226,7 +241,6 @@ impl<L: LightTypeTrait + 'static> Component for LightComponent<L> {
             self.local_proxy.position = parent.transform.position();
             self.local_proxy.direction = parent.transform.forward();
             self.local_proxy.up = parent.transform.up();
-            self.local_proxy.view_mat = parent.transform.view_matrix_rigid().to_mat4();
             self.dirty = true;
         }
 
@@ -241,6 +255,16 @@ impl<L: LightTypeTrait + 'static> Component for LightComponent<L> {
                 .local_proxy
                 .inner_angle
                 .lerp(self.target_inner_angle, self.inner_angle_t * delta);
+            let inner = self
+                .local_proxy
+                .inner_angle
+                .min(self.local_proxy.outer_angle);
+            let outer = self
+                .local_proxy
+                .inner_angle
+                .max(self.local_proxy.outer_angle);
+            self.local_proxy.cos_inner = inner.cos();
+            self.local_proxy.cos_outer = outer.cos();
             self.dirty = true;
         }
     }

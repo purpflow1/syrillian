@@ -1,3 +1,10 @@
+const EDGE_THRESHOLD     = 0.125;
+const EDGE_THRESHOLD_MIN = 0.0312;
+
+const REDUCE_MUL = 1.0 / 8.0;
+const REDUCE_MIN = 1.0 / 128.0;
+const SPAN_MAX   = 8.0;
+
 fn luma(c: vec3f) -> f32 {
     return dot(c, vec3f(0.2126, 0.7152, 0.0722));
 }
@@ -25,9 +32,6 @@ fn fxaa(uv: vec2f) -> vec3f {
     let lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
     let lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
     let lumaRange = lumaMax - lumaMin;
-
-    let EDGE_THRESHOLD     = 0.125;
-    let EDGE_THRESHOLD_MIN = 0.0312;
     if (lumaRange < max(EDGE_THRESHOLD_MIN, lumaMax * EDGE_THRESHOLD)) {
         return rgbM;
     }
@@ -36,10 +40,6 @@ fn fxaa(uv: vec2f) -> vec3f {
         -((lumaNW + lumaNE) - (lumaSW + lumaSE)),
          ((lumaNW + lumaSW) - (lumaNE + lumaSE))
     );
-
-    let REDUCE_MUL = 1.0 / 8.0;
-    let REDUCE_MIN = 1.0 / 128.0;
-    let SPAN_MAX   = 8.0;
 
     let dirReduce = max(
         (lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * REDUCE_MUL),

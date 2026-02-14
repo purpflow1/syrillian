@@ -7,6 +7,7 @@ use crate::rendering::renderer::Renderer;
 use crate::rendering::uniform::ShaderUniform;
 #[cfg(debug_assertions)]
 use crate::try_activate_shader;
+use glamx::Mat4;
 use itertools::Itertools;
 use syrillian_asset::store::{Ref, Store, StoreType};
 use syrillian_asset::{HRenderTexture2DArray, RenderTexture2DArray};
@@ -30,6 +31,7 @@ pub struct LightManager {
     empty_shadow_uniform: ShaderUniform<ShadowUniformIndex>,
     pub shadow_texture: HRenderTexture2DArray,
     pub _shadow_sampler: Sampler,
+    shadow_matrices: Vec<Mat4>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -62,15 +64,18 @@ impl LightManager {
 
             if required_layers == 0 {
                 light.shadow_map_id = u32::MAX;
+                light.shadow_mat_base = u32::MAX;
                 continue;
             }
 
             if next_layer + required_layers > layers {
                 light.shadow_map_id = u32::MAX;
+                light.shadow_mat_base = u32::MAX;
                 continue;
             }
 
             light.shadow_map_id = next_layer;
+            light.shadow_mat_base = next_layer;
 
             for face in 0..required_layers {
                 self.shadow_assignments.push(ShadowAssignment {
@@ -196,6 +201,16 @@ impl LightManager {
             .render_texture_arrays
             .try_get(empty_shadow_texture, cache)
             .unwrap();
+        let shadow_matrices =
+            vec![Mat4::IDENTITY; texture.size.depth_or_array_layers.max(1) as usize];
+        let shadow_texel = [
+            1.0 / texture.size.width.max(1) as f32,
+            1.0 / texture.size.height.max(1) as f32,
+        ];
+        let empty_shadow_texel = [
+            1.0 / empty_texture.size.width.max(1) as f32,
+            1.0 / empty_texture.size.height.max(1) as f32,
+        ];
 
         let bgl = cache.bgl_light();
         let count: u32 = 0;
@@ -223,11 +238,15 @@ impl LightManager {
         let shadow_uniform = ShaderUniform::builder(bgl.clone())
             .with_texture(texture.view.clone())
             .with_sampler(shadow_sampler.clone())
+            .with_storage_buffer_data(shadow_matrices.as_slice())
+            .with_buffer_data(&shadow_texel)
             .build(device);
 
         let empty_shadow_uniform = ShaderUniform::builder(bgl)
             .with_texture(empty_texture.view.clone())
             .with_sampler(shadow_sampler.clone())
+            .with_storage_buffer_data(shadow_matrices.as_slice())
+            .with_buffer_data(&empty_shadow_texel)
             .build(device);
 
         Self {
@@ -240,11 +259,21 @@ impl LightManager {
             empty_shadow_uniform,
             shadow_texture,
             _shadow_sampler: shadow_sampler,
+            shadow_matrices,
         }
     }
 
     #[profiling::function]
     pub fn update(&mut self, cache: &AssetCache, queue: &Queue, device: &Device) {
+        for light in self.proxies.iter_mut() {
+            let inner = light.inner_angle.min(light.outer_angle);
+            let outer = light.inner_angle.max(light.outer_angle);
+            light.cos_inner = inner.cos();
+            light.cos_outer = outer.cos();
+        }
+
+        self.shadow_matrices.fill(Mat4::IDENTITY);
+
         for (render_data, assignment) in self
             .render_data
             .iter_mut()
@@ -267,7 +296,18 @@ impl LightManager {
                 LightType::Spot => render_data.update_shadow_camera_for_spot(light, queue),
                 LightType::Sun => (),
             }
+
+            if let Some(shadow_mat) = self.shadow_matrices.get_mut(assignment.layer as usize) {
+                *shadow_mat = render_data.camera_data.proj_view_mat;
+            }
         }
+
+        queue.write_buffer(
+            self.shadow_uniform
+                .buffer(ShadowUniformIndex::ShadowMatrices),
+            0,
+            bytemuck::cast_slice(self.shadow_matrices.as_slice()),
+        );
 
         let proxies = proxy_buffer_slice(&self.proxies);
         let size = proxies.len();

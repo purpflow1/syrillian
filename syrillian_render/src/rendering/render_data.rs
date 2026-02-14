@@ -137,9 +137,9 @@ impl RenderUniformData {
         let near = 0.05_f32;
         let far = light.range.max(near + 0.01);
         let proj = Mat4::perspective_rh(fovy, 1.0, near, far);
+        let view = Mat4::look_at_rh(light.position, light.position + light.direction, light.up);
 
-        self.camera_data
-            .update(&proj, &light.position, &light.view_mat);
+        self.camera_data.update(&proj, &light.position, &view);
         self.upload_camera_data(queue);
     }
 
