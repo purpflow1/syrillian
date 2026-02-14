@@ -1,10 +1,12 @@
 mod bloom;
 mod fxaa;
+mod ssao;
 mod ssr;
 
 use crate::rendering::uniform::ShaderUniform;
 pub use bloom::{BloomInputSource, BloomRenderPass, BloomSettings};
 pub use fxaa::{FxaaInputSource, FxaaRenderPass};
+pub use ssao::{ScreenSpaceAmbientOcclusionRenderPass, SsaoInputSource};
 pub use ssr::ScreenSpaceReflectionRenderPass;
 use syrillian_macros::UniformIndex;
 use wgpu::{

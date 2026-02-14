@@ -3,8 +3,8 @@ use wgpu::TextureFormat;
 pub const PICKING_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 
 const POST_PROCESS_VERTEX: &str = include_str!("functions/vertex_postprocess_quad.wgsl");
-const MESH3D_NO_BONES_GROUP: &str = include_str!("groups/mesh3d.wgsl");
-const MESH3D_VERTEX_NO_BONES: &str = include_str!("functions/vertex_mesh3d.wgsl");
+const MESH3D_GROUP: &str = include_str!("groups/mesh3d.wgsl");
+const MESH3D_VERTEX: &str = include_str!("functions/vertex_mesh3d.wgsl");
 const MATH_HELPERS: &str = include_str!("functions/helpers/math.wgsl");
 const MESH3D_PBR: &str = include_str!("functions/pbr_mesh3d.wgsl");
 
@@ -64,6 +64,9 @@ impl ShaderGenerator {
 
         let mut out = String::new();
 
+        out.push_str(MATH_HELPERS);
+        out.push('\n');
+
         match kind {
             ShaderKind::PostProcess => {
                 out.push_str(RENDER_GROUP);
@@ -97,7 +100,7 @@ impl ShaderGenerator {
                 }
 
                 if fragment_only {
-                    out.push_str(MESH3D_VERTEX_NO_BONES);
+                    out.push_str(MESH3D_VERTEX);
                     out.push('\n');
                 }
 
@@ -105,7 +108,6 @@ impl ShaderGenerator {
                 out
             }
             ShaderKind::Custom => {
-                let uses_directive = source.lines().any(|line| line.contains("#use "));
                 let has_render_group = source.contains("@group(0)");
                 if !has_render_group {
                     out.push_str(RENDER_GROUP);
@@ -125,7 +127,7 @@ impl ShaderGenerator {
                         "material" => out.push_str(material_group),
                         "material_textures" => out.push_str(material_textures_group),
                         "light" | "shadow" => out.push_str(LIGHT_GROUP),
-                        "default_vertex" => push_default_header(&mut out),
+                        "default_vertex" => push_default_mesh_groups(&mut out),
                         "post_process" => out.push_str(POST_PROCESS_GROUP),
                         "render" => out.push_str(RENDER_GROUP),
                         _ => {}
@@ -134,42 +136,39 @@ impl ShaderGenerator {
                 }
 
                 if fragment_only {
-                    out.push_str(MESH3D_VERTEX_NO_BONES);
+                    out.push_str(MESH3D_VERTEX);
                     out.push('\n');
-                }
-
-                if !uses_directive && has_render_group && !fragment_only {
-                    // If we didn't insert anything, just return the original source.
-                    return source.to_string();
                 }
 
                 out
             }
             ShaderKind::Compute => {
                 let uses_directive = source.lines().any(|line| line.contains("#use "));
-                if !uses_directive {
-                    return source.to_string();
-                }
 
-                for line in source.lines() {
-                    let Some(import) = line.find("#use ") else {
-                        out.push_str(line);
-                        out.push('\n');
-                        continue;
-                    };
+                if uses_directive {
+                    for line in source.lines() {
+                        let Some(import) = line.find("#use ") else {
+                            out.push_str(line);
+                            out.push('\n');
+                            continue;
+                        };
 
-                    let group = line[import + 5..].trim();
-                    match group {
-                        "render" => out.push_str(RENDER_GROUP),
-                        "model" => out.push_str(MODEL_GROUP),
-                        "material" => out.push_str(material_group),
-                        "material_textures" => out.push_str(material_textures_group),
-                        "light" | "shadow" => out.push_str(LIGHT_GROUP),
-                        "post_process" => out.push_str(POST_PROCESS_GROUP),
-                        _ => {}
+                        let group = line[import + 5..].trim();
+                        match group {
+                            "render" => out.push_str(RENDER_GROUP),
+                            "model" => out.push_str(MODEL_GROUP),
+                            "material" => out.push_str(material_group),
+                            "material_textures" => out.push_str(material_textures_group),
+                            "light" | "shadow" => out.push_str(LIGHT_GROUP),
+                            "post_process" => out.push_str(POST_PROCESS_GROUP),
+                            _ => {}
+                        }
                     }
-                    out.push('\n');
+                } else {
+                    out.push_str(source);
                 }
+
+                out.push('\n');
 
                 out
             }
@@ -179,8 +178,7 @@ impl ShaderGenerator {
     pub fn build_mesh_shader(compiled: &ShaderCompilationOutput, pass: MeshPass) -> String {
         let mut out = String::new();
 
-        out.push_str(MATH_HELPERS);
-        out.push_str(MESH3D_NO_BONES_GROUP);
+        out.push_str(MESH3D_GROUP);
         out.push('\n');
 
         out.push_str(RENDER_GROUP);
@@ -208,7 +206,7 @@ impl ShaderGenerator {
             out.push_str("var<immediate> pick: PickColor;\n\n");
         }
 
-        out.push_str(MESH3D_VERTEX_NO_BONES);
+        out.push_str(MESH3D_VERTEX);
         out.push('\n');
 
         let ret = match pass {
@@ -260,17 +258,8 @@ pub fn assemble_compute_shader(source: &str) -> String {
     ShaderGenerator::assemble_shader(source, false, ShaderKind::Compute, false, None)
 }
 
-fn push_default_header(out: &mut String) {
-    out.push_str(MATH_HELPERS);
-    out.push('\n');
-    out.push_str(MESH3D_NO_BONES_GROUP);
-    out.push('\n');
-}
-
 fn push_default_mesh_groups(out: &mut String) {
-    out.push_str(MATH_HELPERS);
-    out.push('\n');
-    out.push_str(MESH3D_NO_BONES_GROUP);
+    out.push_str(MESH3D_GROUP);
     out.push('\n');
 }
 

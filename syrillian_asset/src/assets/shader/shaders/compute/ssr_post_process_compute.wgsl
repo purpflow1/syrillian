@@ -13,17 +13,6 @@ fn uv_to_pixel(uv: vec2f, size_f: vec2f) -> vec2i {
     return vec2i(clamped * size_f);
 }
 
-fn oct_decode(enc_in: vec2f) -> vec3f {
-    let enc = clamp(enc_in, vec2f(-1.0), vec2f(1.0));
-    var v = vec3f(enc.x, enc.y, 1.0 - abs(enc.x) - abs(enc.y));
-    if (v.z < 0.0) {
-        let v_new = (1.0 - abs(v.yx)) * sign(v.xy);
-        v.x = v_new.x;
-        v.y = v_new.y;
-    }
-    return normalize(v);
-}
-
 fn reconstruct_world(uv: vec2f, depth_ndc: f32) -> vec3f {
     let ndc = vec4f(uv * vec2f(2.0, -2.0) + vec2f(-1.0, 1.0), depth_ndc, 1.0);
     let world_h = camera.inv_view_proj_mat * ndc;

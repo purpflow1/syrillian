@@ -23,8 +23,10 @@ impl HBGL {
     pub const MESH_SKINNING_COMPUTE_ID: u32 = 8;
     pub const PARTICLE_COMPUTE_ID: u32 = 9;
     pub const BLOOM_COMPUTE_ID: u32 = 10;
+    pub const SSAO_COMPUTE_ID: u32 = 11;
+    pub const SSAO_APPLY_COMPUTE_ID: u32 = 12;
 
-    const MAX_BUILTIN_ID: u32 = 10;
+    const MAX_BUILTIN_ID: u32 = 12;
 
     pub const RENDER: HBGL = HBGL::new(Self::RENDER_ID);
     pub const MODEL: HBGL = HBGL::new(Self::MODEL_ID);
@@ -37,6 +39,8 @@ impl HBGL {
     pub const MESH_SKINNING_COMPUTE: HBGL = HBGL::new(Self::MESH_SKINNING_COMPUTE_ID);
     pub const PARTICLE_COMPUTE: HBGL = HBGL::new(Self::PARTICLE_COMPUTE_ID);
     pub const BLOOM_COMPUTE: HBGL = HBGL::new(Self::BLOOM_COMPUTE_ID);
+    pub const SSAO_COMPUTE: HBGL = HBGL::new(Self::SSAO_COMPUTE_ID);
+    pub const SSAO_APPLY_COMPUTE: HBGL = HBGL::new(Self::SSAO_APPLY_COMPUTE_ID);
 }
 
 impl StoreType for BGL {
@@ -58,6 +62,10 @@ impl StoreType for BGL {
             }
             HBGL::PARTICLE_COMPUTE_ID => HandleName::Static("Particle Compute Bind Group Layout"),
             HBGL::BLOOM_COMPUTE_ID => HandleName::Static("Bloom Compute Bind Group Layout"),
+            HBGL::SSAO_COMPUTE_ID => HandleName::Static("SSAO Compute Bind Group Layout"),
+            HBGL::SSAO_APPLY_COMPUTE_ID => {
+                HandleName::Static("SSAO Apply Compute Bind Group Layout")
+            }
             _ => HandleName::Id(handle),
         }
     }
@@ -164,7 +172,7 @@ const LIGHT_ENTRIES: [BindGroupLayoutEntry; 2] = [
     },
 ];
 
-const SHADOW_ENTRIES: [BindGroupLayoutEntry; 2] = [
+const SHADOW_ENTRIES: [BindGroupLayoutEntry; 4] = [
     BindGroupLayoutEntry {
         binding: 0,
         visibility: ShaderStages::FRAGMENT,
@@ -179,6 +187,26 @@ const SHADOW_ENTRIES: [BindGroupLayoutEntry; 2] = [
         binding: 1,
         visibility: ShaderStages::FRAGMENT,
         ty: BindingType::Sampler(SamplerBindingType::Comparison),
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::FRAGMENT,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 3,
+        visibility: ShaderStages::FRAGMENT,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
         count: None,
     },
 ];
@@ -426,6 +454,92 @@ const BLOOM_COMPUTE_ENTRIES: [BindGroupLayoutEntry; 5] = [
     },
 ];
 
+const SSAO_COMPUTE_ENTRIES: [BindGroupLayoutEntry; 5] = [
+    BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Depth,
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 1,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: false },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: false },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 3,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: false },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 4,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::StorageTexture {
+            access: StorageTextureAccess::WriteOnly,
+            format: TextureFormat::R32Float,
+            view_dimension: TextureViewDimension::D2,
+        },
+        count: None,
+    },
+];
+
+const SSAO_APPLY_COMPUTE_ENTRIES: [BindGroupLayoutEntry; 3] = [
+    BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: true },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 1,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: false },
+            view_dimension: TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::COMPUTE,
+        ty: BindingType::StorageTexture {
+            access: StorageTextureAccess::WriteOnly,
+            format: TextureFormat::Rgba8Unorm,
+            view_dimension: TextureViewDimension::D2,
+        },
+        count: None,
+    },
+];
+
 impl StoreDefaults for BGL {
     fn populate(store: &mut Store<Self>) {
         store_add_checked!(
@@ -524,6 +638,24 @@ impl StoreDefaults for BGL {
             BGL {
                 label: HBGL::BLOOM_COMPUTE.ident(),
                 entries: BLOOM_COMPUTE_ENTRIES.to_vec()
+            }
+        );
+
+        store_add_checked!(
+            store,
+            HBGL::SSAO_COMPUTE_ID,
+            BGL {
+                label: HBGL::SSAO_COMPUTE.ident(),
+                entries: SSAO_COMPUTE_ENTRIES.to_vec()
+            }
+        );
+
+        store_add_checked!(
+            store,
+            HBGL::SSAO_APPLY_COMPUTE_ID,
+            BGL {
+                label: HBGL::SSAO_APPLY_COMPUTE.ident(),
+                entries: SSAO_APPLY_COMPUTE_ENTRIES.to_vec()
             }
         );
     }

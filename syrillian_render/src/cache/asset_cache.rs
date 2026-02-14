@@ -228,6 +228,18 @@ impl AssetCache {
             .expect("Bloom Compute is a default layout")
     }
 
+    pub fn bgl_ssao_compute(&self) -> BindGroupLayout {
+        self.bgls
+            .try_get(HBGL::SSAO_COMPUTE, self)
+            .expect("SSAO Compute is a default layout")
+    }
+
+    pub fn bgl_ssao_apply_compute(&self) -> BindGroupLayout {
+        self.bgls
+            .try_get(HBGL::SSAO_APPLY_COMPUTE, self)
+            .expect("SSAO Apply Compute is a default layout")
+    }
+
     pub fn material_layout(&self, layout: &MaterialInputLayout) -> BindGroupLayout {
         let key = layout.layout_key();
         if let Some(existing) = self.material_layouts.get(&key) {

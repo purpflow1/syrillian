@@ -12,17 +12,17 @@ pub const DEFAULT_VBL_STEP_INSTANCE: [VertexBufferLayout; 1] = {
 
 pub const DEFAULT_COLOR_TARGETS: &[Option<ColorTargetState>] = &[
     Some(ColorTargetState {
-        format: TextureFormat::Rgba8Unorm,
+        format: TextureFormat::Rgba8Unorm, // color
         blend: Some(BlendState::ALPHA_BLENDING),
         write_mask: ColorWrites::all(),
     }),
     Some(ColorTargetState {
-        format: TextureFormat::Rg16Float,
+        format: TextureFormat::Rg16Float, // normal
         blend: Some(BlendState::REPLACE),
         write_mask: ColorWrites::all(),
     }),
     Some(ColorTargetState {
-        format: TextureFormat::Bgra8Unorm,
+        format: TextureFormat::Bgra8Unorm, // material
         blend: Some(BlendState::REPLACE),
         write_mask: ColorWrites::all(),
     }),

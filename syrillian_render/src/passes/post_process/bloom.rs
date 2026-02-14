@@ -17,6 +17,7 @@ use wgpu::{
 pub enum BloomInputSource {
     Base = 0,
     Ssr = 1,
+    Ssao = 2,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -57,9 +58,11 @@ impl BloomSettings {
 
     pub fn from_engine_args() -> Self {
         let args = EngineArgs::get();
-        let mut out = Self::default();
+        let mut out = Self {
+            enabled: !args.no_bloom,
+            ..Default::default()
+        };
 
-        out.enabled = !args.no_bloom;
         if let Some(v) = args.bloom_threshold {
             out.threshold = v;
         }
@@ -133,10 +136,10 @@ pub struct BloomRenderPass {
     pub output: OffscreenSurface,
     _half_a: OffscreenSurface,
     _half_b: OffscreenSurface,
-    prefilter_uniforms: [ShaderUniform<BloomComputeUniformIndex>; 2],
+    prefilter_uniforms: [ShaderUniform<BloomComputeUniformIndex>; 3],
     blur_horizontal_uniform: ShaderUniform<BloomComputeUniformIndex>,
     blur_vertical_uniform: ShaderUniform<BloomComputeUniformIndex>,
-    composite_uniforms: [ShaderUniform<BloomComputeUniformIndex>; 2],
+    composite_uniforms: [ShaderUniform<BloomComputeUniformIndex>; 3],
     half_width: u32,
     half_height: u32,
 }
@@ -148,6 +151,7 @@ impl BloomRenderPass {
         bloom_compute_bgl: BindGroupLayout,
         color_base_view: TextureView,
         color_ssr_view: TextureView,
+        color_ssao_view: TextureView,
         settings: &BloomSettings,
     ) -> Self {
         let full_width = config.width.max(1);
@@ -223,6 +227,13 @@ impl BloomRenderPass {
                 .with_buffer_data(&params_prefilter)
                 .with_texture(half_a.view().clone())
                 .build(device),
+            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
+                .with_texture(color_ssao_view.clone())
+                .with_texture(color_ssao_view.clone())
+                .with_sampler(sampler.clone())
+                .with_buffer_data(&params_prefilter)
+                .with_texture(half_a.view().clone())
+                .build(device),
         ];
 
         let blur_horizontal_uniform =
@@ -251,8 +262,15 @@ impl BloomRenderPass {
                 .with_buffer_data(&params_composite)
                 .with_texture(output.view().clone())
                 .build(device),
-            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl)
+            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
                 .with_texture(color_ssr_view)
+                .with_texture(half_a.view().clone())
+                .with_sampler(sampler.clone())
+                .with_buffer_data(&params_composite)
+                .with_texture(output.view().clone())
+                .build(device),
+            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl)
+                .with_texture(color_ssao_view)
                 .with_texture(half_a.view().clone())
                 .with_sampler(sampler)
                 .with_buffer_data(&params_composite)

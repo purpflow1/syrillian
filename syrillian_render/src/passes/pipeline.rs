@@ -1,7 +1,8 @@
 use crate::cache::AssetCache;
 use crate::passes::post_process::{
     BloomInputSource, BloomRenderPass, BloomSettings, FxaaInputSource, FxaaRenderPass,
-    PostProcessData, ScreenSpaceReflectionRenderPass,
+    PostProcessData, ScreenSpaceAmbientOcclusionRenderPass, ScreenSpaceReflectionRenderPass,
+    SsaoInputSource,
 };
 use crate::passes::ui_pass::UiRenderPass;
 use crate::rendering::offscreen_surface::OffscreenSurface;
@@ -23,6 +24,7 @@ use winit::dpi::PhysicalSize;
 enum SceneSource {
     Base,
     Ssr,
+    Ssao,
     Bloom,
 }
 
@@ -30,8 +32,9 @@ enum SceneSource {
 enum FinalSource {
     Base = 0,
     Ssr = 1,
-    Bloom = 2,
-    Fxaa = 3,
+    Ssao = 2,
+    Bloom = 3,
+    Fxaa = 4,
 }
 
 pub struct FinalFrameContext<'a> {
@@ -46,6 +49,7 @@ pub struct RenderPipeline {
     pub depth_texture: Texture,
     pub offscreen_surface: OffscreenSurface,
     pub ssr_pass: ScreenSpaceReflectionRenderPass,
+    pub ssao_pass: ScreenSpaceAmbientOcclusionRenderPass,
     pub fxaa_pass: FxaaRenderPass,
     pub bloom_pass: BloomRenderPass,
     pub final_surfaces: [OffscreenSurface; 2],
@@ -53,7 +57,7 @@ pub struct RenderPipeline {
     pub g_material: Texture,
     pub g_velocity: Texture,
 
-    final_uniforms: [PostProcessData; 4],
+    final_uniforms: [PostProcessData; 5],
     bloom_settings: BloomSettings,
     bloom_settings_dirty: bool,
 }
@@ -96,6 +100,18 @@ impl RenderPipeline {
             material_view.clone(),
         );
 
+        let ssao_pass = ScreenSpaceAmbientOcclusionRenderPass::new(
+            device,
+            config,
+            cache.bgl_ssao_compute(),
+            cache.bgl_ssao_apply_compute(),
+            offscreen_surface.view().clone(),
+            ssr_pass.output.view().clone(),
+            depth_view.clone(),
+            normal_view.clone(),
+            material_view.clone(),
+        );
+
         let bloom_settings = BloomSettings::from_engine_args();
 
         let bloom_pass = BloomRenderPass::new(
@@ -104,6 +120,7 @@ impl RenderPipeline {
             bloom_compute_bgl,
             offscreen_surface.view().clone(),
             ssr_pass.output.view().clone(),
+            ssao_pass.output.view().clone(),
             &bloom_settings,
         );
 
@@ -113,6 +130,7 @@ impl RenderPipeline {
             &pp_bgl,
             offscreen_surface.view().clone(),
             ssr_pass.output.view().clone(),
+            ssao_pass.output.view().clone(),
             bloom_pass.output.view().clone(),
             depth_view.clone(),
             normal_view.clone(),
@@ -139,6 +157,14 @@ impl RenderPipeline {
             PostProcessData::new(
                 device,
                 pp_bgl.clone(),
+                ssao_pass.output.view().clone(),
+                depth_view.clone(),
+                normal_view.clone(),
+                material_view.clone(),
+            ),
+            PostProcessData::new(
+                device,
+                pp_bgl.clone(),
                 bloom_pass.output.view().clone(),
                 depth_view.clone(),
                 normal_view.clone(),
@@ -158,6 +184,7 @@ impl RenderPipeline {
             depth_texture,
             offscreen_surface,
             ssr_pass,
+            ssao_pass,
             fxaa_pass,
             bloom_pass,
             final_surfaces,
@@ -307,11 +334,24 @@ impl RenderPipeline {
             source = SceneSource::Ssr;
         }
 
+        if !EngineArgs::get().no_ssao {
+            let source_ssao = match source {
+                SceneSource::Base => SsaoInputSource::Base,
+                SceneSource::Ssr => SsaoInputSource::Ssr,
+                SceneSource::Ssao => SsaoInputSource::Ssr,
+                SceneSource::Bloom => SsaoInputSource::Ssr,
+            };
+            self.ssao_pass
+                .render(camera_render_data, encoder, cache, source_ssao);
+            source = SceneSource::Ssao;
+        }
+
         if self.bloom_settings.enabled {
             let source_bloom = match source {
                 SceneSource::Base => BloomInputSource::Base,
                 SceneSource::Ssr => BloomInputSource::Ssr,
-                SceneSource::Bloom => BloomInputSource::Ssr,
+                SceneSource::Ssao => BloomInputSource::Ssao,
+                SceneSource::Bloom => BloomInputSource::Ssao,
             };
             self.bloom_pass.render(
                 camera_render_data,
@@ -327,6 +367,7 @@ impl RenderPipeline {
             let source_fxaa = match source {
                 SceneSource::Base => FxaaInputSource::Base,
                 SceneSource::Ssr => FxaaInputSource::Ssr,
+                SceneSource::Ssao => FxaaInputSource::Ssao,
                 SceneSource::Bloom => FxaaInputSource::Bloom,
             };
             self.fxaa_pass
@@ -363,6 +404,9 @@ impl RenderPipeline {
             FinalSource::Ssr
         };
 
+        if !EngineArgs::get().no_ssao {
+            source = FinalSource::Ssao;
+        }
         if self.bloom_settings.enabled {
             source = FinalSource::Bloom;
         }

@@ -1,10 +1,17 @@
 use crate::HComputeShader;
 use crate::store::{H, HandleName, Store, StoreDefaults, StoreType, StoreTypeFallback};
 use crate::{HBGL, store_add_checked};
+use bon::Builder;
 
 const COMPUTE_MESH_SKINNING: &str = include_str!("shader/shaders/compute/mesh_skinning.wgsl");
 const COMPUTE_POST_PROCESS_SSR: &str =
     include_str!("shader/shaders/compute/ssr_post_process_compute.wgsl");
+const COMPUTE_POST_PROCESS_SSAO: &str =
+    include_str!("shader/shaders/compute/ssao_post_process_compute.wgsl");
+const COMPUTE_POST_PROCESS_SSAO_BLUR: &str =
+    include_str!("shader/shaders/compute/ssao_blur_compute.wgsl");
+const COMPUTE_POST_PROCESS_SSAO_APPLY: &str =
+    include_str!("shader/shaders/compute/ssao_apply_compute.wgsl");
 const COMPUTE_PARTICLE_POSITION: &str =
     include_str!("shader/shaders/compute/particle_position.wgsl");
 const COMPUTE_POST_PROCESS_BLOOM_PREFILTER: &str =
@@ -14,11 +21,15 @@ const COMPUTE_POST_PROCESS_BLOOM_BLUR: &str =
 const COMPUTE_POST_PROCESS_BLOOM_COMPOSITE: &str =
     include_str!("shader/shaders/compute/bloom_composite_compute.wgsl");
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 pub struct ComputeShader {
+    #[builder(into)]
     name: String,
+    #[builder(into)]
     code: String,
+    #[builder(default = "cs_main".to_string(), into)]
     entry_point: String,
+    #[builder(default)]
     bind_group_layouts: Vec<HBGL>,
 }
 
@@ -30,7 +41,11 @@ impl H<ComputeShader> {
     pub const POST_PROCESS_BLOOM_PREFILTER_ID: u32 = 4;
     pub const POST_PROCESS_BLOOM_BLUR_ID: u32 = 5;
     pub const POST_PROCESS_BLOOM_COMPOSITE_ID: u32 = 6;
-    pub const MAX_BUILTIN_ID: u32 = 6;
+    pub const POST_PROCESS_SSAO_ID: u32 = 7;
+    pub const POST_PROCESS_SSAO_BLUR_X_ID: u32 = 8;
+    pub const POST_PROCESS_SSAO_BLUR_Y_ID: u32 = 9;
+    pub const POST_PROCESS_SSAO_APPLY_ID: u32 = 10;
+    pub const MAX_BUILTIN_ID: u32 = 10;
 
     pub const FALLBACK: H<ComputeShader> = H::new(Self::FALLBACK_ID);
     pub const MESH_SKINNING: H<ComputeShader> = H::new(Self::MESH_SKINNING_ID);
@@ -41,6 +56,12 @@ impl H<ComputeShader> {
     pub const POST_PROCESS_BLOOM_BLUR: H<ComputeShader> = H::new(Self::POST_PROCESS_BLOOM_BLUR_ID);
     pub const POST_PROCESS_BLOOM_COMPOSITE: H<ComputeShader> =
         H::new(Self::POST_PROCESS_BLOOM_COMPOSITE_ID);
+    pub const POST_PROCESS_SSAO: H<ComputeShader> = H::new(Self::POST_PROCESS_SSAO_ID);
+    pub const POST_PROCESS_SSAO_BLUR_X: H<ComputeShader> =
+        H::new(Self::POST_PROCESS_SSAO_BLUR_X_ID);
+    pub const POST_PROCESS_SSAO_BLUR_Y: H<ComputeShader> =
+        H::new(Self::POST_PROCESS_SSAO_BLUR_Y_ID);
+    pub const POST_PROCESS_SSAO_APPLY: H<ComputeShader> = H::new(Self::POST_PROCESS_SSAO_APPLY_ID);
 }
 
 impl StoreDefaults for ComputeShader {
@@ -114,6 +135,48 @@ impl StoreDefaults for ComputeShader {
                 vec![HBGL::BLOOM_COMPUTE]
             )
         );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_SSAO_ID,
+            ComputeShader::new(
+                "SSAO Post Process Compute",
+                COMPUTE_POST_PROCESS_SSAO,
+                vec![HBGL::RENDER, HBGL::SSAO_COMPUTE]
+            )
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_SSAO_BLUR_X_ID,
+            ComputeShader::builder()
+                .name("SSAO Blur X Compute")
+                .code(COMPUTE_POST_PROCESS_SSAO_BLUR)
+                .entry_point("cs_blur_x")
+                .bind_group_layouts(vec![HBGL::SSAO_COMPUTE])
+                .build()
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_SSAO_BLUR_Y_ID,
+            ComputeShader::builder()
+                .name("SSAO Blur Y Compute")
+                .code(COMPUTE_POST_PROCESS_SSAO_BLUR)
+                .entry_point("cs_blur_y")
+                .bind_group_layouts(vec![HBGL::SSAO_COMPUTE])
+                .build()
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_SSAO_APPLY_ID,
+            ComputeShader::new(
+                "SSAO Apply Compute",
+                COMPUTE_POST_PROCESS_SSAO_APPLY,
+                vec![HBGL::SSAO_APPLY_COMPUTE]
+            )
+        );
     }
 }
 
@@ -139,6 +202,18 @@ impl StoreType for ComputeShader {
             HComputeShader::POST_PROCESS_BLOOM_COMPOSITE_ID => {
                 HandleName::Static("Bloom Composite Compute Shader")
             }
+            HComputeShader::POST_PROCESS_SSAO_ID => {
+                HandleName::Static("SSAO Post Process Compute Shader")
+            }
+            HComputeShader::POST_PROCESS_SSAO_BLUR_X_ID => {
+                HandleName::Static("SSAO Blur X Compute Shader")
+            }
+            HComputeShader::POST_PROCESS_SSAO_BLUR_Y_ID => {
+                HandleName::Static("SSAO Blur Y Compute Shader")
+            }
+            HComputeShader::POST_PROCESS_SSAO_APPLY_ID => {
+                HandleName::Static("SSAO Apply Compute Shader")
+            }
             _ => HandleName::Id(handle),
         }
     }
@@ -160,12 +235,25 @@ impl ComputeShader {
         code: impl Into<String>,
         bind_group_layouts: Vec<HBGL>,
     ) -> Self {
-        Self {
-            name: name.into(),
-            code: code.into(),
-            entry_point: "cs_main".to_string(),
-            bind_group_layouts,
-        }
+        Self::builder()
+            .name(name)
+            .code(code)
+            .bind_group_layouts(bind_group_layouts)
+            .build()
+    }
+
+    pub fn new_with_entry_point(
+        name: impl Into<String>,
+        code: impl Into<String>,
+        entry_point: impl Into<String>,
+        bind_group_layouts: Vec<HBGL>,
+    ) -> Self {
+        Self::builder()
+            .name(name)
+            .code(code)
+            .entry_point(entry_point)
+            .bind_group_layouts(bind_group_layouts)
+            .build()
     }
 
     pub fn name(&self) -> &str {

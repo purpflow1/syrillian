@@ -17,10 +17,6 @@ struct SkinningParams {
 @group(0) @binding(2) var<storage, read> src_words: array<u32>;
 @group(0) @binding(3) var<storage, read_write> dst_words: array<u32>;
 
-fn sum4(v: vec4<f32>) -> f32 {
-    return v.x + v.y + v.z + v.w;
-}
-
 fn normalize_weights(w_in: vec4<f32>) -> vec4<f32> {
     let w = max(w_in, vec4<f32>(0.0));
     let s = sum4(w);

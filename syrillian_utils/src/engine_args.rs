@@ -83,6 +83,8 @@ pub struct EngineArgs {
     #[argh(switch, hidden_help)]
     pub no_ssr: bool,
     #[argh(switch, hidden_help)]
+    pub no_ssao: bool,
+    #[argh(switch, hidden_help)]
     pub no_bloom: bool,
 
     #[argh(option, hidden_help)]
