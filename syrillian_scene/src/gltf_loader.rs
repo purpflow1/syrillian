@@ -326,7 +326,7 @@ fn load_node_light(node: Node, mut obj: GameObjectId) {
                 d.color = color;
                 d.range = range;
                 d.radius = 0.05;
-                d.intensity = intensity;
+                d.intensity = intensity / 100.0;
             }
             Kind::Directional => {
                 let mut sun = obj.add_component::<SunLightComponent>();
