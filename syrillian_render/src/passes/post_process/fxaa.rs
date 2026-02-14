@@ -13,11 +13,12 @@ use wgpu::{
 pub enum FxaaInputSource {
     Base = 0,
     Ssr = 1,
+    Bloom = 2,
 }
 
 pub struct FxaaRenderPass {
     pub output: OffscreenSurface,
-    uniforms: [PostProcessData; 2],
+    uniforms: [PostProcessData; 3],
 }
 
 impl FxaaRenderPass {
@@ -27,6 +28,7 @@ impl FxaaRenderPass {
         post_process_bgl: &wgpu::BindGroupLayout,
         color_base_view: TextureView,
         color_ssr_view: TextureView,
+        color_bloom_view: TextureView,
         depth_view: TextureView,
         g_normal_view: TextureView,
         g_material_view: TextureView,
@@ -51,6 +53,14 @@ impl FxaaRenderPass {
                 device,
                 post_process_bgl.clone(),
                 color_ssr_view,
+                depth_view.clone(),
+                g_normal_view.clone(),
+                g_material_view.clone(),
+            ),
+            PostProcessData::new(
+                device,
+                post_process_bgl.clone(),
+                color_bloom_view,
                 depth_view,
                 g_normal_view,
                 g_material_view,

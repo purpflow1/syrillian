@@ -7,6 +7,12 @@ const COMPUTE_POST_PROCESS_SSR: &str =
     include_str!("shader/shaders/compute/ssr_post_process_compute.wgsl");
 const COMPUTE_PARTICLE_POSITION: &str =
     include_str!("shader/shaders/compute/particle_position.wgsl");
+const COMPUTE_POST_PROCESS_BLOOM_PREFILTER: &str =
+    include_str!("shader/shaders/compute/bloom_prefilter_compute.wgsl");
+const COMPUTE_POST_PROCESS_BLOOM_BLUR: &str =
+    include_str!("shader/shaders/compute/bloom_blur_compute.wgsl");
+const COMPUTE_POST_PROCESS_BLOOM_COMPOSITE: &str =
+    include_str!("shader/shaders/compute/bloom_composite_compute.wgsl");
 
 #[derive(Debug, Clone)]
 pub struct ComputeShader {
@@ -21,12 +27,20 @@ impl H<ComputeShader> {
     pub const MESH_SKINNING_ID: u32 = 1;
     pub const POST_PROCESS_SSR_ID: u32 = 2;
     pub const PARTICLE_POSITION_ID: u32 = 3;
-    pub const MAX_BUILTIN_ID: u32 = 3;
+    pub const POST_PROCESS_BLOOM_PREFILTER_ID: u32 = 4;
+    pub const POST_PROCESS_BLOOM_BLUR_ID: u32 = 5;
+    pub const POST_PROCESS_BLOOM_COMPOSITE_ID: u32 = 6;
+    pub const MAX_BUILTIN_ID: u32 = 6;
 
     pub const FALLBACK: H<ComputeShader> = H::new(Self::FALLBACK_ID);
     pub const MESH_SKINNING: H<ComputeShader> = H::new(Self::MESH_SKINNING_ID);
     pub const POST_PROCESS_SSR: H<ComputeShader> = H::new(Self::POST_PROCESS_SSR_ID);
     pub const PARTICLE_POSITION: H<ComputeShader> = H::new(Self::PARTICLE_POSITION_ID);
+    pub const POST_PROCESS_BLOOM_PREFILTER: H<ComputeShader> =
+        H::new(Self::POST_PROCESS_BLOOM_PREFILTER_ID);
+    pub const POST_PROCESS_BLOOM_BLUR: H<ComputeShader> = H::new(Self::POST_PROCESS_BLOOM_BLUR_ID);
+    pub const POST_PROCESS_BLOOM_COMPOSITE: H<ComputeShader> =
+        H::new(Self::POST_PROCESS_BLOOM_COMPOSITE_ID);
 }
 
 impl StoreDefaults for ComputeShader {
@@ -70,6 +84,36 @@ impl StoreDefaults for ComputeShader {
                 vec![HBGL::PARTICLE_COMPUTE]
             )
         );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_BLOOM_PREFILTER_ID,
+            ComputeShader::new(
+                "Bloom Prefilter Compute",
+                COMPUTE_POST_PROCESS_BLOOM_PREFILTER,
+                vec![HBGL::BLOOM_COMPUTE]
+            )
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_BLOOM_BLUR_ID,
+            ComputeShader::new(
+                "Bloom Blur Compute",
+                COMPUTE_POST_PROCESS_BLOOM_BLUR,
+                vec![HBGL::BLOOM_COMPUTE]
+            )
+        );
+
+        store_add_checked!(
+            store,
+            HComputeShader::POST_PROCESS_BLOOM_COMPOSITE_ID,
+            ComputeShader::new(
+                "Bloom Composite Compute",
+                COMPUTE_POST_PROCESS_BLOOM_COMPOSITE,
+                vec![HBGL::BLOOM_COMPUTE]
+            )
+        );
     }
 }
 
@@ -85,6 +129,15 @@ impl StoreType for ComputeShader {
             }
             HComputeShader::PARTICLE_POSITION_ID => {
                 HandleName::Static("Particle Position Compute Shader")
+            }
+            HComputeShader::POST_PROCESS_BLOOM_PREFILTER_ID => {
+                HandleName::Static("Bloom Prefilter Compute Shader")
+            }
+            HComputeShader::POST_PROCESS_BLOOM_BLUR_ID => {
+                HandleName::Static("Bloom Blur Compute Shader")
+            }
+            HComputeShader::POST_PROCESS_BLOOM_COMPOSITE_ID => {
+                HandleName::Static("Bloom Composite Compute Shader")
             }
             _ => HandleName::Id(handle),
         }

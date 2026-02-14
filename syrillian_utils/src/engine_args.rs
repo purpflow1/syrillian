@@ -82,6 +82,8 @@ pub struct EngineArgs {
     pub no_shadows: bool,
     #[argh(switch, hidden_help)]
     pub no_ssr: bool,
+    #[argh(switch, hidden_help)]
+    pub no_bloom: bool,
 
     #[argh(option, hidden_help)]
     pub max_frames_in_flight: Option<u32>,
@@ -96,6 +98,18 @@ pub struct EngineArgs {
     pub force_backend: Option<Option<Vec<wgpu::Backends>>>,
     #[argh(option, hidden_help, from_str_fn(aa_mode))]
     pub aa_mode: Option<Option<AntiAliasingMode>>,
+    #[argh(option, hidden_help)]
+    pub bloom_threshold: Option<f32>,
+    #[argh(option, hidden_help)]
+    pub bloom_soft_knee: Option<f32>,
+    #[argh(option, hidden_help)]
+    pub bloom_intensity: Option<f32>,
+    #[argh(option, hidden_help)]
+    pub bloom_radius: Option<f32>,
+    #[argh(option, hidden_help)]
+    pub bloom_clamp_max: Option<f32>,
+    #[argh(option, hidden_help)]
+    pub bloom_blur_passes: Option<u32>,
 }
 
 impl EngineArgs {

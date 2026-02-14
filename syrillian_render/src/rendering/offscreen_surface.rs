@@ -13,17 +13,18 @@ impl OffscreenSurface {
         Self::new_with(device, config, config.format, TextureUsages::empty())
     }
 
-    pub fn new_with(
+    pub fn new_sized_with(
         device: &Device,
-        config: &SurfaceConfiguration,
+        width: u32,
+        height: u32,
         format: wgpu::TextureFormat,
         extra_usage: TextureUsages,
     ) -> Self {
         let texture = device.create_texture(&TextureDescriptor {
             label: Some("Offscreen Texture"),
             size: Extent3d {
-                width: config.width,
-                height: config.height,
+                width: width.max(1),
+                height: height.max(1),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -41,6 +42,15 @@ impl OffscreenSurface {
         let view = texture.create_view(&TextureViewDescriptor::default());
 
         OffscreenSurface { texture, view }
+    }
+
+    pub fn new_with(
+        device: &Device,
+        config: &SurfaceConfiguration,
+        format: wgpu::TextureFormat,
+        extra_usage: TextureUsages,
+    ) -> Self {
+        Self::new_sized_with(device, config.width, config.height, format, extra_usage)
     }
 
     #[profiling::function]

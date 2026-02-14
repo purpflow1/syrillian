@@ -1,6 +1,7 @@
 use crate::cache::AssetCache;
 use crate::passes::post_process::{
-    FxaaInputSource, FxaaRenderPass, PostProcessData, ScreenSpaceReflectionRenderPass,
+    BloomInputSource, BloomRenderPass, BloomSettings, FxaaInputSource, FxaaRenderPass,
+    PostProcessData, ScreenSpaceReflectionRenderPass,
 };
 use crate::passes::ui_pass::UiRenderPass;
 use crate::rendering::offscreen_surface::OffscreenSurface;
@@ -22,13 +23,15 @@ use winit::dpi::PhysicalSize;
 enum SceneSource {
     Base,
     Ssr,
+    Bloom,
 }
 
 #[derive(Debug, Copy, Clone)]
 enum FinalSource {
     Base = 0,
     Ssr = 1,
-    Fxaa = 2,
+    Bloom = 2,
+    Fxaa = 3,
 }
 
 pub struct FinalFrameContext<'a> {
@@ -44,18 +47,22 @@ pub struct RenderPipeline {
     pub offscreen_surface: OffscreenSurface,
     pub ssr_pass: ScreenSpaceReflectionRenderPass,
     pub fxaa_pass: FxaaRenderPass,
+    pub bloom_pass: BloomRenderPass,
     pub final_surfaces: [OffscreenSurface; 2],
     pub g_normal: Texture,
     pub g_material: Texture,
     pub g_velocity: Texture,
 
-    final_uniforms: [PostProcessData; 3],
+    final_uniforms: [PostProcessData; 4],
+    bloom_settings: BloomSettings,
+    bloom_settings_dirty: bool,
 }
 
 impl RenderPipeline {
     pub fn new(device: &Device, cache: &AssetCache, config: &SurfaceConfiguration) -> Self {
         let pp_bgl = cache.bgl_post_process();
         let pp_compute_bgl = cache.bgl_post_process_compute();
+        let bloom_compute_bgl = cache.bgl_bloom_compute();
 
         info!("Render Pipeline AA mode: {:?}", EngineArgs::aa_mode());
 
@@ -89,12 +96,24 @@ impl RenderPipeline {
             material_view.clone(),
         );
 
+        let bloom_settings = BloomSettings::from_engine_args();
+
+        let bloom_pass = BloomRenderPass::new(
+            device,
+            config,
+            bloom_compute_bgl,
+            offscreen_surface.view().clone(),
+            ssr_pass.output.view().clone(),
+            &bloom_settings,
+        );
+
         let fxaa_pass = FxaaRenderPass::new(
             device,
             config,
             &pp_bgl,
             offscreen_surface.view().clone(),
             ssr_pass.output.view().clone(),
+            bloom_pass.output.view().clone(),
             depth_view.clone(),
             normal_view.clone(),
             material_view.clone(),
@@ -120,6 +139,14 @@ impl RenderPipeline {
             PostProcessData::new(
                 device,
                 pp_bgl.clone(),
+                bloom_pass.output.view().clone(),
+                depth_view.clone(),
+                normal_view.clone(),
+                material_view.clone(),
+            ),
+            PostProcessData::new(
+                device,
+                pp_bgl.clone(),
                 fxaa_pass.output.view().clone(),
                 depth_view.clone(),
                 normal_view.clone(),
@@ -132,16 +159,21 @@ impl RenderPipeline {
             offscreen_surface,
             ssr_pass,
             fxaa_pass,
+            bloom_pass,
             final_surfaces,
             g_normal: normal_texture,
             g_material: material_texture,
             g_velocity: velocity_texture,
             final_uniforms,
+            bloom_settings,
+            bloom_settings_dirty: false,
         }
     }
 
     pub fn recreate(&mut self, device: &Device, cache: &AssetCache, config: &SurfaceConfiguration) {
+        let bloom_settings = self.bloom_settings;
         *self = Self::new(device, cache, config);
+        self.set_bloom_settings(bloom_settings);
     }
 
     #[inline]
@@ -243,6 +275,20 @@ impl RenderPipeline {
         render_data.camera_data.inv_proj_view_mat = view_proj.inverse();
 
         render_data.upload_camera_data(queue);
+
+        if self.bloom_settings_dirty {
+            self.bloom_pass.update_settings(queue, &self.bloom_settings);
+            self.bloom_settings_dirty = false;
+        }
+    }
+
+    pub fn set_bloom_settings(&mut self, settings: BloomSettings) {
+        self.bloom_settings = settings.sanitized();
+        self.bloom_settings_dirty = true;
+    }
+
+    pub fn bloom_settings(&self) -> &BloomSettings {
+        &self.bloom_settings
     }
 
     fn final_uniform(&self, source: FinalSource) -> &PostProcessData {
@@ -255,23 +301,36 @@ impl RenderPipeline {
         encoder: &mut CommandEncoder,
         cache: &AssetCache,
     ) {
-        // Post-process order is intentionally: Scene -> SSR -> AA.
-        let mut post_ssr_source = SceneSource::Base;
+        let mut source = SceneSource::Base;
         if !EngineArgs::get().no_ssr {
             self.ssr_pass.render(camera_render_data, encoder, cache);
-            post_ssr_source = SceneSource::Ssr;
+            source = SceneSource::Ssr;
         }
 
-        match EngineArgs::aa_mode() {
-            AntiAliasingMode::Off => (),
-            AntiAliasingMode::Fxaa => {
-                let source = match post_ssr_source {
-                    SceneSource::Base => FxaaInputSource::Base,
-                    SceneSource::Ssr => FxaaInputSource::Ssr,
-                };
-                self.fxaa_pass
-                    .render(camera_render_data, encoder, cache, source);
-            }
+        if self.bloom_settings.enabled {
+            let source_bloom = match source {
+                SceneSource::Base => BloomInputSource::Base,
+                SceneSource::Ssr => BloomInputSource::Ssr,
+                SceneSource::Bloom => BloomInputSource::Ssr,
+            };
+            self.bloom_pass.render(
+                camera_render_data,
+                encoder,
+                cache,
+                source_bloom,
+                &self.bloom_settings,
+            );
+            source = SceneSource::Bloom;
+        }
+
+        if let AntiAliasingMode::Fxaa = EngineArgs::aa_mode() {
+            let source_fxaa = match source {
+                SceneSource::Base => FxaaInputSource::Base,
+                SceneSource::Ssr => FxaaInputSource::Ssr,
+                SceneSource::Bloom => FxaaInputSource::Bloom,
+            };
+            self.fxaa_pass
+                .render(camera_render_data, encoder, cache, source_fxaa);
         }
     }
 
@@ -304,9 +363,11 @@ impl RenderPipeline {
             FinalSource::Ssr
         };
 
-        match EngineArgs::aa_mode() {
-            AntiAliasingMode::Off => {}
-            AntiAliasingMode::Fxaa => source = FinalSource::Fxaa,
+        if self.bloom_settings.enabled {
+            source = FinalSource::Bloom;
+        }
+        if let AntiAliasingMode::Fxaa = EngineArgs::aa_mode() {
+            source = FinalSource::Fxaa;
         }
 
         {

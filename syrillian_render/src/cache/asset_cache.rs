@@ -222,6 +222,12 @@ impl AssetCache {
             .expect("Particle Compute is a default layout")
     }
 
+    pub fn bgl_bloom_compute(&self) -> BindGroupLayout {
+        self.bgls
+            .try_get(HBGL::BLOOM_COMPUTE, self)
+            .expect("Bloom Compute is a default layout")
+    }
+
     pub fn material_layout(&self, layout: &MaterialInputLayout) -> BindGroupLayout {
         let key = layout.layout_key();
         if let Some(existing) = self.material_layouts.get(&key) {
