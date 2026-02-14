@@ -389,6 +389,7 @@ impl PostProcessMaterialExpression for PostProcessPassthroughMaterial {
         debug_assert_eq!(output_index, 0, "output_index must be 0 for passthrough");
         let uv = compiler.vertex_uv();
         let (tex, sampler) = compiler.post_surface_input();
-        compiler.texture_sample(tex, sampler, uv)
+        let sampled = compiler.texture_sample(tex, sampler, uv);
+        compiler.call("post_color_grade", vec![sampled])
     }
 }

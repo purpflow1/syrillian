@@ -1,5 +1,5 @@
 @fragment
-fn fs_main(in: FInput) -> @location(0) vec4<f32> {
+fn fs_main(in: FInput) -> FOutput {
   let time = system.time;
 
   let uv = in.uv - 0.5;
@@ -28,5 +28,11 @@ fn fs_main(in: FInput) -> @location(0) vec4<f32> {
   let center_glow = exp(-radius * 8.0) * 0.5;
   let glow_color = vec3<f32>(1.0, 0.8, 0.6) * center_glow;
 
-  return vec4<f32>(final_color + glow_color, 1.0);
+  var out: FOutput;
+
+  out.out_color = vec4(final_color + glow_color, 1.0);
+  out.out_normal = vec4(oct_encode(normalize(in.normal)), 0.0, 1.0);
+  out.out_material = vec4(1.0, 0.0, 0.0, out.out_color.a);
+
+  return out;
 }

@@ -8,7 +8,7 @@ pub mod immediates;
 
 use self::defaults::{
     DEFAULT_COLOR_TARGETS, DEFAULT_PP_COLOR_TARGETS, DEFAULT_VBL, DEFAULT_VBL_STEP_INSTANCE,
-    ONLY_COLOR_TARGET,
+    ONLY_COLOR_TARGET, ONLY_COLOR_TARGET_SRGB, SURFACE_PP_COLOR_TARGETS,
 };
 use crate::HShader;
 use crate::material_inputs::MaterialInputLayout;
@@ -131,7 +131,8 @@ impl H<Shader> {
     pub const DEBUG_TEXT3D_GEOMETRY_ID: u32 = 15;
     pub const DEBUG_LIGHT_ID: u32 = 16;
     pub const DIM3_SHADOW_ID: u32 = 17;
-    pub const MAX_BUILTIN_ID: u32 = 17;
+    pub const POST_PROCESS_FXAA_ID: u32 = 18;
+    pub const MAX_BUILTIN_ID: u32 = 18;
 
     // The fallback shader if a pipeline fails
     pub const FALLBACK: H<Shader> = H::new(Self::FALLBACK_ID);
@@ -153,6 +154,7 @@ impl H<Shader> {
 
     // Default post-processing shader
     pub const POST_PROCESS: H<Shader> = H::new(Self::POST_PROCESS_ID);
+    pub const POST_PROCESS_FXAA: H<Shader> = H::new(Self::POST_PROCESS_FXAA_ID);
 
     // Default 2D Text shader.
     pub const TEXT_2D: H<Shader> = H::new(Self::TEXT_2D_ID);
@@ -190,6 +192,7 @@ const SHADER_TEXT2D_PICKER: &str = include_str!("shaders/picking_text2d.wgsl");
 const SHADER_TEXT3D: &str = include_str!("shaders/text3d.wgsl");
 const SHADER_TEXT3D_PICKER: &str = include_str!("shaders/picking_text3d.wgsl");
 const SHADER_LINE2D: &str = include_str!("shaders/line.wgsl");
+const SHADER_POST_PROCESS_FXAA: &str = include_str!("shaders/post_process_fxaa.wgsl");
 
 const DEBUG_EDGES_SHADER: &str = include_str!("shaders/debug/edges.wgsl");
 const DEBUG_VERTEX_NORMAL_SHADER: &str = include_str!("shaders/debug/vertex_normals.wgsl");
@@ -227,7 +230,7 @@ impl StoreDefaults for Shader {
                 .shader_type(ShaderType::Default)
                 .name("2D Default")
                 .code(ShaderCode::Full(SHADER_DIM2.to_string()))
-                .color_target(ONLY_COLOR_TARGET)
+                .color_target(ONLY_COLOR_TARGET_SRGB)
                 .immediate_size(material_immediates)
                 .material_layout(default_layout.clone())
                 .material_groups(material_groups.clone())
@@ -251,7 +254,7 @@ impl StoreDefaults for Shader {
         store_add_checked!(
             store,
             HShader::POST_PROCESS_ID,
-            Shader::new_post_process_fragment("Post Process", post_process_fs)
+            Shader::new_post_process_fragment("Passthrough", post_process_fs)
         );
 
         const TEXT_VBL: &[VertexBufferLayout] = &[VertexBufferLayout {
@@ -309,7 +312,7 @@ impl StoreDefaults for Shader {
                 .shader_type(ShaderType::Custom)
                 .name("Text 2D Shader")
                 .code(ShaderCode::Full(SHADER_TEXT2D.to_string()))
-                .color_target(ONLY_COLOR_TARGET)
+                .color_target(ONLY_COLOR_TARGET_SRGB)
                 .vertex_buffers(TEXT_VBL)
                 .immediate_size(size_of::<TextImmediate>() as u32)
                 .material_layout(default_layout.clone())
@@ -372,7 +375,7 @@ impl StoreDefaults for Shader {
                 .shader_type(ShaderType::Custom)
                 .name("Line 2D Shader")
                 .code(ShaderCode::Full(SHADER_LINE2D.to_string()))
-                .color_target(ONLY_COLOR_TARGET)
+                .color_target(ONLY_COLOR_TARGET_SRGB)
                 .topology(PrimitiveTopology::TriangleList)
                 .vertex_buffers(&[])
                 .immediate_size(size_of::<UiLineImmediate>() as u32)
@@ -499,6 +502,12 @@ impl StoreDefaults for Shader {
                 .material_groups(material_groups.clone())
                 .build()
         );
+
+        store_add_checked!(
+            store,
+            HShader::POST_PROCESS_FXAA_ID,
+            Shader::new_post_process_fragment_linear("Post Process FXAA", SHADER_POST_PROCESS_FXAA)
+        );
     }
 }
 
@@ -522,6 +531,7 @@ impl StoreType for Shader {
             HShader::TEXT_2D_ID => "2D Text Shader",
             HShader::TEXT_3D_ID => "3D Text Shader",
             HShader::POST_PROCESS_ID => "Post Process Shader",
+            HShader::POST_PROCESS_FXAA_ID => "Post Process FXAA Shader",
 
             HShader::DEBUG_EDGES_ID => "Debug Edges Shader",
             HShader::DEBUG_VERTEX_NORMALS_ID => "Debug Vertex Normals Shader",
@@ -582,6 +592,27 @@ impl Shader {
     }
 
     pub fn new_post_process_fragment<S, S2>(name: S, code: S2) -> Shader
+    where
+        S: Into<String>,
+        S2: Into<String>,
+    {
+        Shader {
+            name: name.into(),
+            code: ShaderCode::Fragment(code.into()),
+            polygon_mode: PolygonMode::Fill,
+            topology: PrimitiveTopology::TriangleList,
+            vertex_buffers: &DEFAULT_VBL,
+            color_target: SURFACE_PP_COLOR_TARGETS,
+            immediate_size: 0,
+            shadow_transparency: false,
+            depth_enabled: false,
+            shader_type: ShaderType::PostProcessing,
+            material_layout: None,
+            material_groups: None,
+        }
+    }
+
+    pub fn new_post_process_fragment_linear<S, S2>(name: S, code: S2) -> Shader
     where
         S: Into<String>,
         S2: Into<String>,

@@ -10,7 +10,7 @@ fn tri(x_og: f32, y_og: f32) -> bool {
 }
 
 @fragment
-fn fs_main(in: FInput) -> @location(0) vec4<f32> {
+fn fs_main(in: FInput) -> FOutput {
   let time = system.time;
   let slices = 20.;
   let uv_x = in.uv.x;
@@ -38,5 +38,11 @@ fn fs_main(in: FInput) -> @location(0) vec4<f32> {
   var color = vec4(1.0, in.uv, 1.0) * opacity * tri_thing;
   color.a = 1.0;
 
-  return color;
+  var out: FOutput;
+
+  out.out_color = color;
+  out.out_normal = vec4(oct_encode(normalize(in.normal)), 0.0, 1.0);
+  out.out_material = vec4(1.0, 0.0, 0.0, color.a);
+
+  return out;
 }

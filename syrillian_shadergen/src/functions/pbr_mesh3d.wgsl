@@ -429,15 +429,7 @@ fn pbr_fragment(
         }
     }
 
-    // neutral tonemap
-//    let color_tm = tonemap_neutral(Lo);
-
-    // raw
-    //let color_tm = Lo;
-
-    // filmic tonemapping
-    let color_tm = tonemap_ACES(Lo);
-    out.out_color = vec4(color_tm, base_rgba.a * alpha_in);
+    out.out_color = vec4(Lo, base_rgba.a * alpha_in);
     return out;
 }
 

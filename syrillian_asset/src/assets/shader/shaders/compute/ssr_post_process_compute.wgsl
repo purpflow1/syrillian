@@ -1,24 +1,4 @@
-struct CameraData {
-    position: vec3<f32>,
-    fov: f32,
-    view_mat: mat4x4<f32>,
-    projection_mat: mat4x4<f32>,
-    view_proj_mat: mat4x4<f32>,
-    inv_view_proj_mat: mat4x4<f32>,
-    near: f32,
-    far: f32,
-    fov_target: f32,
-    zoom_speed: f32,
-}
-
-struct SystemData {
-    screen: vec2<u32>,
-    time: f32,
-    delta_time: f32,
-}
-
-@group(0) @binding(0) var<uniform> camera: CameraData;
-@group(0) @binding(1) var<uniform> system: SystemData;
+#use render
 
 @group(1) @binding(0) var postTexture: texture_2d<f32>;
 @group(1) @binding(1) var postSampler: sampler;
@@ -26,10 +6,6 @@ struct SystemData {
 @group(1) @binding(3) var postNormal: texture_2d<f32>;
 @group(1) @binding(4) var postMaterial: texture_2d<f32>;
 @group(1) @binding(5) var ssrOutput: texture_storage_2d<rgba8unorm, write>;
-
-fn saturate(x: f32) -> f32 {
-    return clamp(x, 0.0, 1.0);
-}
 
 fn uv_to_pixel(uv: vec2f, size_f: vec2f) -> vec2i {
     let max_uv = (size_f - vec2f(1.0)) / size_f;

@@ -9,6 +9,7 @@ use crate::cache::{AssetCache, GpuTexture};
 use crate::error::*;
 use crate::lighting::manager::LightManager;
 use crate::lighting::proxy::LightType;
+use crate::passes::pipeline::FinalFrameContext;
 use crate::proxies::{SceneProxy, SceneProxyBinding};
 #[cfg(debug_assertions)]
 use crate::rendering::debug_renderer::DebugRenderer;
@@ -246,6 +247,12 @@ impl Renderer {
         }
 
         let mut ctx = viewport.begin_render();
+        let frame_count = viewport.frame_count();
+        viewport.render_pipeline.prepare_frame(
+            &mut viewport.render_data,
+            &self.state.queue,
+            frame_count,
+        );
         self.render(viewport, &mut ctx);
         self.finalize_frame(viewport)
     }
@@ -623,7 +630,7 @@ impl Renderer {
 
     #[instrument(skip_all)]
     #[profiling::function]
-    fn finalize_frame(&mut self, viewport: &RenderViewport) -> RenderedFrame {
+    fn finalize_frame(&mut self, viewport: &mut RenderViewport) -> RenderedFrame {
         let mut encoder = self
             .state
             .device
@@ -641,9 +648,17 @@ impl Renderer {
             self.copy_gbuffers(&mut encoder, viewport, targets);
         }
 
-        let frame = viewport
-            .render_pipeline
-            .finalize_frame(&mut encoder, viewport, &self.cache);
+        let frame = viewport.render_pipeline.finalize_frame(
+            &mut encoder,
+            &self.cache,
+            FinalFrameContext {
+                render_data: &viewport.render_data,
+                target: viewport.id,
+                size: viewport.size(),
+                format: viewport.config.format,
+                frame_count: viewport.frame_count(),
+            },
+        );
 
         viewport.render_pipeline.render_ui_onto_final_frame(
             &mut encoder,

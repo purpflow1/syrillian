@@ -9,7 +9,7 @@ pub mod sizes;
 
 pub use bounds::BoundingSphere;
 pub use component_id::*;
-pub use engine_args::EngineArgs;
+pub use engine_args::{AntiAliasingMode, EngineArgs};
 pub use frustum::Frustum;
 
 pub use tracing;

@@ -1,6 +1,8 @@
+mod fxaa;
 mod ssr;
 
 use crate::rendering::uniform::ShaderUniform;
+pub use fxaa::{FxaaInputSource, FxaaRenderPass};
 pub use ssr::ScreenSpaceReflectionRenderPass;
 use syrillian_macros::UniformIndex;
 use wgpu::{

@@ -18,7 +18,7 @@ fn tri(x_og: f32, y_og: f32) -> bool {
 }
 
 @fragment
-fn fs_main(in: FInput) -> @location(0) vec4<f32> {
+fn fs_main(in: FInput) -> FOutput {
   let og_x = in.position.x;
   let og_y = in.position.y;
   let x = sin(og_x);
@@ -41,5 +41,11 @@ fn fs_main(in: FInput) -> @location(0) vec4<f32> {
   }
   color.a = 1.0;
 
-  return color;
+  var out: FOutput;
+
+  out.out_color = color;
+  out.out_normal = vec4(oct_encode(normalize(in.normal)), 0.0, 1.0);
+  out.out_material = vec4(1.0, 0.0, 0.0, color.a);
+
+  return out;
 }

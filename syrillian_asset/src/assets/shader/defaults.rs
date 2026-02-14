@@ -12,7 +12,7 @@ pub const DEFAULT_VBL_STEP_INSTANCE: [VertexBufferLayout; 1] = {
 
 pub const DEFAULT_COLOR_TARGETS: &[Option<ColorTargetState>] = &[
     Some(ColorTargetState {
-        format: TextureFormat::Bgra8UnormSrgb,
+        format: TextureFormat::Rgba8Unorm,
         blend: Some(BlendState::ALPHA_BLENDING),
         write_mask: ColorWrites::all(),
     }),
@@ -29,12 +29,24 @@ pub const DEFAULT_COLOR_TARGETS: &[Option<ColorTargetState>] = &[
 ];
 
 pub const ONLY_COLOR_TARGET: &[Option<ColorTargetState>] = &[Some(ColorTargetState {
+    format: TextureFormat::Rgba8Unorm,
+    blend: Some(BlendState::ALPHA_BLENDING),
+    write_mask: ColorWrites::all(),
+})];
+
+pub const ONLY_COLOR_TARGET_SRGB: &[Option<ColorTargetState>] = &[Some(ColorTargetState {
     format: TextureFormat::Bgra8UnormSrgb,
     blend: Some(BlendState::ALPHA_BLENDING),
     write_mask: ColorWrites::all(),
 })];
 
 pub const DEFAULT_PP_COLOR_TARGETS: &[Option<ColorTargetState>] = &[Some(ColorTargetState {
+    format: TextureFormat::Rgba8Unorm,
+    blend: None,
+    write_mask: ColorWrites::all(),
+})];
+
+pub const SURFACE_PP_COLOR_TARGETS: &[Option<ColorTargetState>] = &[Some(ColorTargetState {
     format: TextureFormat::Bgra8UnormSrgb,
     blend: None,
     write_mask: ColorWrites::all(),

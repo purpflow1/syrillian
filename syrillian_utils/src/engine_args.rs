@@ -3,6 +3,13 @@ use glamx::UVec2;
 use std::cmp::Ordering;
 use std::sync::LazyLock;
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+pub enum AntiAliasingMode {
+    Off,
+    #[default]
+    Fxaa,
+}
+
 fn present_mode(mode: &str) -> Result<Option<wgpu::PresentMode>, String> {
     let parsed = match mode {
         "vsync" => wgpu::PresentMode::AutoVsync,
@@ -53,6 +60,15 @@ fn force_backend(backend: &str) -> Result<Option<Vec<wgpu::Backends>>, String> {
     Ok(Some(backends))
 }
 
+fn aa_mode(mode: &str) -> Result<Option<AntiAliasingMode>, String> {
+    let mode = match mode {
+        "off" => AntiAliasingMode::Off,
+        "fxaa" => AntiAliasingMode::Fxaa,
+        _ => return Ok(None),
+    };
+    Ok(Some(mode))
+}
+
 /// Engine arguments
 #[derive(Default, FromArgs)]
 pub struct EngineArgs {
@@ -78,6 +94,8 @@ pub struct EngineArgs {
     pub window_size: Option<Option<UVec2>>,
     #[argh(option, hidden_help, from_str_fn(force_backend))]
     pub force_backend: Option<Option<Vec<wgpu::Backends>>>,
+    #[argh(option, hidden_help, from_str_fn(aa_mode))]
+    pub aa_mode: Option<Option<AntiAliasingMode>>,
 }
 
 impl EngineArgs {
@@ -100,5 +118,9 @@ impl EngineArgs {
             .window_size
             .flatten()
             .unwrap_or(UVec2::new(800, 600))
+    }
+
+    pub fn aa_mode() -> AntiAliasingMode {
+        EngineArgs::get().aa_mode.flatten().unwrap_or_default()
     }
 }
