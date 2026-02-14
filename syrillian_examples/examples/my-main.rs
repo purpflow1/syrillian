@@ -210,22 +210,16 @@ impl MyMain {
         let funky_glass = Shader::new_fragment("Funky Shader 3", SHADER3).store(world);
 
         let make_instance = |name: &str, shader: HShader| {
-            let unskinned = MaterialShaderSet {
+            let shader_set = MaterialShaderSet {
                 base: shader,
                 picking: HShader::DIM3_PICKING,
                 shadow: HShader::DIM3_SHADOW,
-            };
-            let skinned = MaterialShaderSet {
-                base: shader,
-                picking: HShader::DIM3_PICKING_SKINNED,
-                shadow: HShader::DIM3_SHADOW_SKINNED,
             };
 
             let material_def = Material::Custom(CustomMaterial::new(
                 format!("{name} Material"),
                 Material::default_layout(),
-                unskinned,
-                skinned,
+                shader_set,
             ));
             let material_def = world.assets.materials.add(material_def);
 
