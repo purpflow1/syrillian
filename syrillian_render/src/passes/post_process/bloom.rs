@@ -1,24 +1,14 @@
-// TODO: Refactor + properly dispatch Compute
-
-use crate::cache::AssetCache;
+use crate::passes::post_process::{PostProcessPass, PostProcessPassContext, PostProcessRoute};
 use crate::rendering::offscreen_surface::OffscreenSurface;
-use crate::rendering::render_data::RenderUniformData;
 use crate::rendering::uniform::ShaderUniform;
 use syrillian_asset::{HComputeShader, ensure_aligned};
 use syrillian_macros::UniformIndex;
 use syrillian_utils::EngineArgs;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    AddressMode, BindGroupLayout, CommandEncoder, ComputePassDescriptor, Device, FilterMode,
-    MipmapFilterMode, Queue, SamplerDescriptor, SurfaceConfiguration, TextureFormat, TextureUsages,
-    TextureView,
+    AddressMode, BindGroupLayout, Buffer, BufferUsages, ComputePassDescriptor, Device, FilterMode,
+    MipmapFilterMode, Queue, SamplerDescriptor, TextureFormat, TextureUsages, TextureView,
 };
-
-#[derive(Debug, Copy, Clone)]
-pub enum BloomInputSource {
-    Base = 0,
-    Ssr = 1,
-    Ssao = 2,
-}
 
 #[derive(Debug, Copy, Clone)]
 pub struct BloomSettings {
@@ -133,38 +123,37 @@ enum BloomComputeUniformIndex {
 }
 
 pub struct BloomRenderPass {
-    pub output: OffscreenSurface,
-    _half_a: OffscreenSurface,
-    _half_b: OffscreenSurface,
-    prefilter_uniforms: [ShaderUniform<BloomComputeUniformIndex>; 3],
+    settings: BloomSettings,
+    prefilter_params: Buffer,
+    blur_horizontal_params: Buffer,
+    blur_vertical_params: Buffer,
+    composite_params: Buffer,
+    prefilter_uniform: ShaderUniform<BloomComputeUniformIndex>,
     blur_horizontal_uniform: ShaderUniform<BloomComputeUniformIndex>,
     blur_vertical_uniform: ShaderUniform<BloomComputeUniformIndex>,
-    composite_uniforms: [ShaderUniform<BloomComputeUniformIndex>; 3],
+    composite_uniform: ShaderUniform<BloomComputeUniformIndex>,
     half_width: u32,
     half_height: u32,
+    full_width: u32,
+    full_height: u32,
+    _half_a: OffscreenSurface,
+    _half_b: OffscreenSurface,
 }
 
 impl BloomRenderPass {
     pub fn new(
         device: &Device,
-        config: &SurfaceConfiguration,
+        width: u32,
+        height: u32,
         bloom_compute_bgl: BindGroupLayout,
-        color_base_view: TextureView,
-        color_ssr_view: TextureView,
-        color_ssao_view: TextureView,
+        route: &PostProcessRoute,
         settings: &BloomSettings,
     ) -> Self {
-        let full_width = config.width.max(1);
-        let full_height = config.height.max(1);
+        let full_width = width.max(1);
+        let full_height = height.max(1);
         let half_width = full_width.div_ceil(2);
         let half_height = full_height.div_ceil(2);
 
-        let output = OffscreenSurface::new_with(
-            device,
-            config,
-            TextureFormat::Rgba8Unorm,
-            TextureUsages::STORAGE_BINDING,
-        );
         let half_a = OffscreenSurface::new_sized_with(
             device,
             half_width,
@@ -191,57 +180,68 @@ impl BloomRenderPass {
             ..SamplerDescriptor::default()
         });
 
+        let settings = settings.sanitized();
+
         let params_prefilter = BloomComputeParams::new(
-            settings,
+            &settings,
             [0.0, 0.0],
             [1.0 / full_width as f32, 1.0 / full_height as f32],
         );
         let params_blur_h = BloomComputeParams::new(
-            settings,
+            &settings,
             [1.0, 0.0],
             [1.0 / half_width as f32, 1.0 / half_height as f32],
         );
         let params_blur_v = BloomComputeParams::new(
-            settings,
+            &settings,
             [0.0, 1.0],
             [1.0 / half_width as f32, 1.0 / half_height as f32],
         );
         let params_composite = BloomComputeParams::new(
-            settings,
+            &settings,
             [0.0, 0.0],
             [1.0 / full_width as f32, 1.0 / full_height as f32],
         );
 
-        let prefilter_uniforms = [
+        let prefilter_params = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Bloom Prefilter Params"),
+            contents: bytemuck::bytes_of(&params_prefilter),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let blur_horizontal_params = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Bloom Blur Horizontal Params"),
+            contents: bytemuck::bytes_of(&params_blur_h),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let blur_vertical_params = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Bloom Blur Vertical Params"),
+            contents: bytemuck::bytes_of(&params_blur_v),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let composite_params = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Bloom Composite Params"),
+            contents: bytemuck::bytes_of(&params_composite),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let prefilter_uniform =
             ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
-                .with_texture(color_base_view.clone())
-                .with_texture(color_base_view.clone())
+                .with_texture(route.input_color.clone())
+                .with_texture(route.input_color.clone())
                 .with_sampler(sampler.clone())
-                .with_buffer_data(&params_prefilter)
+                .with_buffer(prefilter_params.clone())
                 .with_texture(half_a.view().clone())
-                .build(device),
-            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
-                .with_texture(color_ssr_view.clone())
-                .with_texture(color_ssr_view.clone())
-                .with_sampler(sampler.clone())
-                .with_buffer_data(&params_prefilter)
-                .with_texture(half_a.view().clone())
-                .build(device),
-            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
-                .with_texture(color_ssao_view.clone())
-                .with_texture(color_ssao_view.clone())
-                .with_sampler(sampler.clone())
-                .with_buffer_data(&params_prefilter)
-                .with_texture(half_a.view().clone())
-                .build(device),
-        ];
+                .build(device);
 
         let blur_horizontal_uniform =
             ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
                 .with_texture(half_a.view().clone())
                 .with_texture(half_a.view().clone())
                 .with_sampler(sampler.clone())
-                .with_buffer_data(&params_blur_h)
+                .with_buffer(blur_horizontal_params.clone())
                 .with_texture(half_b.view().clone())
                 .build(device);
 
@@ -250,145 +250,115 @@ impl BloomRenderPass {
                 .with_texture(half_b.view().clone())
                 .with_texture(half_b.view().clone())
                 .with_sampler(sampler.clone())
-                .with_buffer_data(&params_blur_v)
+                .with_buffer(blur_vertical_params.clone())
                 .with_texture(half_a.view().clone())
                 .build(device);
 
-        let composite_uniforms = [
-            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
-                .with_texture(color_base_view)
-                .with_texture(half_a.view().clone())
-                .with_sampler(sampler.clone())
-                .with_buffer_data(&params_composite)
-                .with_texture(output.view().clone())
-                .build(device),
-            ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl.clone())
-                .with_texture(color_ssr_view)
-                .with_texture(half_a.view().clone())
-                .with_sampler(sampler.clone())
-                .with_buffer_data(&params_composite)
-                .with_texture(output.view().clone())
-                .build(device),
+        let composite_uniform =
             ShaderUniform::<BloomComputeUniformIndex>::builder(bloom_compute_bgl)
-                .with_texture(color_ssao_view)
+                .with_texture(route.input_color.clone())
                 .with_texture(half_a.view().clone())
                 .with_sampler(sampler)
-                .with_buffer_data(&params_composite)
-                .with_texture(output.view().clone())
-                .build(device),
-        ];
+                .with_buffer(composite_params.clone())
+                .with_texture(route.output_color.clone())
+                .build(device);
 
         Self {
-            output,
-            _half_a: half_a,
-            _half_b: half_b,
-            prefilter_uniforms,
+            settings,
+            prefilter_params,
+            blur_horizontal_params,
+            blur_vertical_params,
+            composite_params,
+            prefilter_uniform,
             blur_horizontal_uniform,
             blur_vertical_uniform,
-            composite_uniforms,
+            composite_uniform,
             half_width,
             half_height,
+            full_width,
+            full_height,
+            _half_a: half_a,
+            _half_b: half_b,
         }
     }
 
-    fn prefilter_uniform(
-        &self,
-        source: BloomInputSource,
-    ) -> &ShaderUniform<BloomComputeUniformIndex> {
-        &self.prefilter_uniforms[source as usize]
-    }
-
-    fn composite_uniform(
-        &self,
-        source: BloomInputSource,
-    ) -> &ShaderUniform<BloomComputeUniformIndex> {
-        &self.composite_uniforms[source as usize]
-    }
-
-    pub fn update_settings(&self, queue: &Queue, settings: &BloomSettings) {
-        let full_size = self.output.texture().size();
-        let full_width = full_size.width.max(1);
-        let full_height = full_size.height.max(1);
+    pub fn update_settings(&mut self, queue: &Queue, settings: &BloomSettings) {
+        self.settings = settings.sanitized();
 
         let prefilter = BloomComputeParams::new(
-            settings,
+            &self.settings,
             [0.0, 0.0],
-            [1.0 / full_width as f32, 1.0 / full_height as f32],
+            [
+                1.0 / self.full_width.max(1) as f32,
+                1.0 / self.full_height.max(1) as f32,
+            ],
         );
         let blur_h = BloomComputeParams::new(
-            settings,
+            &self.settings,
             [1.0, 0.0],
-            [1.0 / self.half_width as f32, 1.0 / self.half_height as f32],
+            [
+                1.0 / self.half_width.max(1) as f32,
+                1.0 / self.half_height.max(1) as f32,
+            ],
         );
         let blur_v = BloomComputeParams::new(
-            settings,
+            &self.settings,
             [0.0, 1.0],
-            [1.0 / self.half_width as f32, 1.0 / self.half_height as f32],
+            [
+                1.0 / self.half_width.max(1) as f32,
+                1.0 / self.half_height.max(1) as f32,
+            ],
         );
         let composite = BloomComputeParams::new(
-            settings,
+            &self.settings,
             [0.0, 0.0],
-            [1.0 / full_width as f32, 1.0 / full_height as f32],
+            [
+                1.0 / self.full_width.max(1) as f32,
+                1.0 / self.full_height.max(1) as f32,
+            ],
         );
 
-        for uniform in &self.prefilter_uniforms {
-            queue.write_buffer(
-                uniform.buffer(BloomComputeUniformIndex::Params),
-                0,
-                bytemuck::bytes_of(&prefilter),
-            );
-        }
-        for uniform in &self.composite_uniforms {
-            queue.write_buffer(
-                uniform.buffer(BloomComputeUniformIndex::Params),
-                0,
-                bytemuck::bytes_of(&composite),
-            );
-        }
-        queue.write_buffer(
-            self.blur_horizontal_uniform
-                .buffer(BloomComputeUniformIndex::Params),
-            0,
-            bytemuck::bytes_of(&blur_h),
-        );
-        queue.write_buffer(
-            self.blur_vertical_uniform
-                .buffer(BloomComputeUniformIndex::Params),
-            0,
-            bytemuck::bytes_of(&blur_v),
-        );
+        queue.write_buffer(&self.prefilter_params, 0, bytemuck::bytes_of(&prefilter));
+        queue.write_buffer(&self.blur_horizontal_params, 0, bytemuck::bytes_of(&blur_h));
+        queue.write_buffer(&self.blur_vertical_params, 0, bytemuck::bytes_of(&blur_v));
+        queue.write_buffer(&self.composite_params, 0, bytemuck::bytes_of(&composite));
+    }
+}
+
+impl PostProcessPass for BloomRenderPass {
+    fn name(&self) -> &'static str {
+        "Bloom"
     }
 
-    pub fn render(
-        &self,
-        render_data: &RenderUniformData,
-        encoder: &mut CommandEncoder,
-        cache: &AssetCache,
-        source: BloomInputSource,
-        settings: &BloomSettings,
-    ) {
-        let full_width = render_data.system_data.screen_size.x.max(1);
-        let full_height = render_data.system_data.screen_size.y.max(1);
+    fn execute(&mut self, ctx: &mut PostProcessPassContext<'_>, _output_color: &TextureView) {
+        let full_width = ctx.camera_render_data.system_data.screen_size.x.max(1);
+        let full_height = ctx.camera_render_data.system_data.screen_size.y.max(1);
         let half_dispatch_x = self.half_width.div_ceil(8);
         let half_dispatch_y = self.half_height.div_ceil(8);
         let full_dispatch_x = full_width.div_ceil(8);
         let full_dispatch_y = full_height.div_ceil(8);
 
-        let prefilter_shader = cache.compute_shader(HComputeShader::POST_PROCESS_BLOOM_PREFILTER);
-        let blur_shader = cache.compute_shader(HComputeShader::POST_PROCESS_BLOOM_BLUR);
-        let composite_shader = cache.compute_shader(HComputeShader::POST_PROCESS_BLOOM_COMPOSITE);
+        let prefilter_shader = ctx
+            .cache
+            .compute_shader(HComputeShader::POST_PROCESS_BLOOM_PREFILTER);
+        let blur_shader = ctx
+            .cache
+            .compute_shader(HComputeShader::POST_PROCESS_BLOOM_BLUR);
+        let composite_shader = ctx
+            .cache
+            .compute_shader(HComputeShader::POST_PROCESS_BLOOM_COMPOSITE);
 
-        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+        let mut pass = ctx.encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("Bloom Compute Pass"),
             ..ComputePassDescriptor::default()
         });
 
         pass.set_pipeline(prefilter_shader.pipeline());
-        pass.set_bind_group(0, self.prefilter_uniform(source).bind_group(), &[]);
+        pass.set_bind_group(0, self.prefilter_uniform.bind_group(), &[]);
         pass.dispatch_workgroups(half_dispatch_x, half_dispatch_y, 1);
 
         pass.set_pipeline(blur_shader.pipeline());
-        for _ in 0..settings.blur_passes {
+        for _ in 0..self.settings.blur_passes {
             pass.set_bind_group(0, self.blur_horizontal_uniform.bind_group(), &[]);
             pass.dispatch_workgroups(half_dispatch_x, half_dispatch_y, 1);
 
@@ -397,7 +367,7 @@ impl BloomRenderPass {
         }
 
         pass.set_pipeline(composite_shader.pipeline());
-        pass.set_bind_group(0, self.composite_uniform(source).bind_group(), &[]);
+        pass.set_bind_group(0, self.composite_uniform.bind_group(), &[]);
         pass.dispatch_workgroups(full_dispatch_x, full_dispatch_y, 1);
     }
 }

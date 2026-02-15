@@ -7,11 +7,11 @@ use wgpu::{
     RenderPassDescriptor, StoreOp, TextureView,
 };
 
-pub struct FxaaRenderPass {
+pub struct FinalRenderPass {
     uniform: PostProcessData,
 }
 
-impl FxaaRenderPass {
+impl FinalRenderPass {
     pub fn new(
         device: &Device,
         post_process_bgl: &BindGroupLayout,
@@ -31,14 +31,14 @@ impl FxaaRenderPass {
     }
 }
 
-impl PostProcessPass for FxaaRenderPass {
+impl PostProcessPass for FinalRenderPass {
     fn name(&self) -> &'static str {
-        "FXAA"
+        "Final"
     }
 
     fn execute(&mut self, ctx: &mut PostProcessPassContext<'_>, output_color: &TextureView) {
         let mut pass = ctx.encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("FXAA Render Pass"),
+            label: Some("Final Render Pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: output_color,
                 depth_slice: None,
@@ -52,7 +52,7 @@ impl PostProcessPass for FxaaRenderPass {
             ..RenderPassDescriptor::default()
         });
 
-        let shader = ctx.cache.shader_post_process_fxaa();
+        let shader = ctx.cache.shader_post_process();
         let groups = shader.bind_groups();
         pass.set_pipeline(shader.solid_pipeline());
         pass.set_bind_group(

@@ -35,7 +35,7 @@ use syrillian_asset::HTexture2D;
 use syrillian_asset::store::AssetStore;
 use syrillian_utils::frustum::FrustumSide;
 use syrillian_utils::{EngineArgs, Frustum, TypedComponentId, debug_panic};
-use tracing::{instrument, trace, warn};
+use tracing::{info, instrument, trace, warn};
 use web_time::Instant;
 use wgpu::*;
 use winit::dpi::PhysicalSize;
@@ -74,6 +74,8 @@ impl Renderer {
 
         let lights = LightManager::new(&cache, &state.device);
         let start_time = Instant::now();
+
+        info!("Render Pipeline AA mode: {:?}", EngineArgs::aa_mode());
 
         let mut viewports = HashMap::new();
         viewports.insert(
@@ -637,12 +639,6 @@ impl Renderer {
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("Final Pass Copy Encoder"),
             });
-
-        viewport.render_pipeline.render_post_process(
-            &viewport.render_data,
-            &mut encoder,
-            &self.cache,
-        );
 
         if let Some(targets) = self.gbuffer_debug.get(&viewport.id) {
             self.copy_gbuffers(&mut encoder, viewport, targets);

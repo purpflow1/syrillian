@@ -1,21 +1,48 @@
 mod bloom;
+mod finalize;
 mod fxaa;
 mod ssao;
 mod ssr;
 
+use crate::cache::AssetCache;
+use crate::rendering::render_data::RenderUniformData;
 use crate::rendering::uniform::ShaderUniform;
-pub use bloom::{BloomInputSource, BloomRenderPass, BloomSettings};
-pub use fxaa::{FxaaInputSource, FxaaRenderPass};
-pub use ssao::{ScreenSpaceAmbientOcclusionRenderPass, SsaoInputSource};
+pub use bloom::{BloomRenderPass, BloomSettings};
+pub use finalize::FinalRenderPass;
+pub use fxaa::FxaaRenderPass;
+pub use ssao::ScreenSpaceAmbientOcclusionRenderPass;
 pub use ssr::ScreenSpaceReflectionRenderPass;
 use syrillian_macros::UniformIndex;
 use wgpu::{
-    AddressMode, BindGroupLayout, Device, FilterMode, MipmapFilterMode, SamplerDescriptor,
-    TextureView,
+    AddressMode, BindGroupLayout, CommandEncoder, Device, FilterMode, MipmapFilterMode,
+    SamplerDescriptor, TextureView,
 };
 
-pub trait PostProcess {
-    fn render(&self);
+#[derive(Clone)]
+pub struct PostProcessSharedViews {
+    pub depth: TextureView,
+    pub g_normal: TextureView,
+    pub g_material: TextureView,
+    pub g_velocity: TextureView,
+}
+
+pub struct PostProcessPassContext<'a> {
+    pub camera_render_data: &'a RenderUniformData,
+    pub encoder: &'a mut CommandEncoder,
+    pub cache: &'a AssetCache,
+}
+
+pub trait PostProcessPass {
+    fn name(&self) -> &'static str;
+    fn execute(&mut self, ctx: &mut PostProcessPassContext<'_>, output_color: &TextureView);
+}
+
+#[derive(Clone)]
+pub struct PostProcessRoute {
+    pub input_id: u32,
+    pub output_id: u32,
+    pub input_color: TextureView,
+    pub output_color: TextureView,
 }
 
 #[repr(u8)]

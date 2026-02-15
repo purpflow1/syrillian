@@ -1,8 +1,8 @@
 use crate::cache::AssetCache;
 use crate::passes::post_process::{
-    BloomInputSource, BloomRenderPass, BloomSettings, FxaaInputSource, FxaaRenderPass,
-    PostProcessData, ScreenSpaceAmbientOcclusionRenderPass, ScreenSpaceReflectionRenderPass,
-    SsaoInputSource,
+    BloomRenderPass, BloomSettings, FinalRenderPass, FxaaRenderPass, PostProcessPass,
+    PostProcessPassContext, PostProcessRoute, PostProcessSharedViews,
+    ScreenSpaceAmbientOcclusionRenderPass, ScreenSpaceReflectionRenderPass,
 };
 use crate::passes::ui_pass::UiRenderPass;
 use crate::rendering::offscreen_surface::OffscreenSurface;
@@ -12,29 +12,42 @@ use crate::rendering::state::State;
 use crate::rendering::viewport::{RenderViewport, ViewportId};
 use crate::strobe::StrobeRenderer;
 use syrillian_utils::{AntiAliasingMode, EngineArgs};
-use tracing::info;
 use wgpu::{
-    Color, CommandEncoder, Device, Extent3d, LoadOp, Operations, Queue, RenderPassColorAttachment,
-    RenderPassDescriptor, StoreOp, SurfaceConfiguration, Texture, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    CommandEncoder, Device, Extent3d, Queue, SurfaceConfiguration, Texture, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
-#[derive(Debug, Copy, Clone)]
-enum SceneSource {
-    Base,
-    Ssr,
-    Ssao,
-    Bloom,
+const COLOR_ID_BASE: u32 = 0;
+const COLOR_ID_POST_A: u32 = 1;
+const COLOR_ID_POST_B: u32 = 2;
+const COLOR_ID_FINAL_A: u32 = 3;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct PostProcessRouting {
+    run_ssr: bool,
+    run_ssao: bool,
+    run_bloom: bool,
+    run_fxaa: bool,
 }
 
-#[derive(Debug, Copy, Clone)]
-enum FinalSource {
-    Base = 0,
-    Ssr = 1,
-    Ssao = 2,
-    Bloom = 3,
-    Fxaa = 4,
+impl PostProcessRouting {
+    fn current() -> Self {
+        Self {
+            run_ssr: !EngineArgs::get().no_ssr,
+            run_ssao: !EngineArgs::get().no_ssao,
+            run_bloom: !EngineArgs::get().no_bloom,
+            run_fxaa: matches!(EngineArgs::aa_mode(), AntiAliasingMode::Fxaa),
+        }
+    }
+}
+
+struct ActivePostProcessRoutes {
+    ssr: PostProcessRoute,
+    ssao: PostProcessRoute,
+    bloom: PostProcessRoute,
+    fxaa: PostProcessRoute,
+    final_pass: PostProcessRoute,
 }
 
 pub struct FinalFrameContext<'a> {
@@ -46,18 +59,23 @@ pub struct FinalFrameContext<'a> {
 }
 
 pub struct RenderPipeline {
+    device: Device,
     pub depth_texture: Texture,
     pub offscreen_surface: OffscreenSurface,
+    pub final_surfaces: [OffscreenSurface; 2],
+    post_process_surfaces: [OffscreenSurface; 2],
+    pub g_normal: Texture,
+    pub g_material: Texture,
+    pub g_velocity: Texture,
+    shared_views: PostProcessSharedViews,
+
     pub ssr_pass: ScreenSpaceReflectionRenderPass,
     pub ssao_pass: ScreenSpaceAmbientOcclusionRenderPass,
     pub fxaa_pass: FxaaRenderPass,
     pub bloom_pass: BloomRenderPass,
-    pub final_surfaces: [OffscreenSurface; 2],
-    pub g_normal: Texture,
-    pub g_material: Texture,
-    pub g_velocity: Texture,
+    pub final_pass: FinalRenderPass,
 
-    final_uniforms: [PostProcessData; 5],
+    route_key: PostProcessRouting,
     bloom_settings: BloomSettings,
     bloom_settings_dirty: bool,
 }
@@ -65,19 +83,17 @@ pub struct RenderPipeline {
 impl RenderPipeline {
     pub fn new(device: &Device, cache: &AssetCache, config: &SurfaceConfiguration) -> Self {
         let pp_bgl = cache.bgl_post_process();
-        let pp_compute_bgl = cache.bgl_post_process_compute();
-        let bloom_compute_bgl = cache.bgl_bloom_compute();
-
-        info!("Render Pipeline AA mode: {:?}", EngineArgs::aa_mode());
 
         let normal_texture = Self::create_g_buffer("GBuffer (Normals)", device, config);
         let material_texture = Self::create_material_texture(device, config);
         let velocity_texture = Self::create_velocity_texture(device, config);
         let depth_texture = Self::create_depth_texture(device, config);
-
-        let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
-        let normal_view = normal_texture.create_view(&TextureViewDescriptor::default());
-        let material_view = material_texture.create_view(&TextureViewDescriptor::default());
+        let shared_views = PostProcessSharedViews {
+            depth: depth_texture.create_view(&TextureViewDescriptor::default()),
+            g_normal: normal_texture.create_view(&TextureViewDescriptor::default()),
+            g_material: material_texture.create_view(&TextureViewDescriptor::default()),
+            g_velocity: velocity_texture.create_view(&TextureViewDescriptor::default()),
+        };
 
         let offscreen_surface = OffscreenSurface::new_with(
             device,
@@ -85,113 +101,85 @@ impl RenderPipeline {
             TextureFormat::Rgba8Unorm,
             TextureUsages::empty(),
         );
+
+        let post_process_surfaces = [
+            OffscreenSurface::new_with(
+                device,
+                config,
+                TextureFormat::Rgba8Unorm,
+                TextureUsages::STORAGE_BINDING,
+            ),
+            OffscreenSurface::new_with(
+                device,
+                config,
+                TextureFormat::Rgba8Unorm,
+                TextureUsages::STORAGE_BINDING,
+            ),
+        ];
+
         let final_surfaces = [
             OffscreenSurface::new(device, config),
             OffscreenSurface::new(device, config),
         ];
 
+        let bloom_settings = BloomSettings::from_engine_args();
+        let routing = PostProcessRouting::current();
+
+        let routes = Self::compose_routes(
+            routing,
+            offscreen_surface.view().clone(),
+            post_process_surfaces[0].view().clone(),
+            post_process_surfaces[1].view().clone(),
+            final_surfaces[0].view().clone(),
+        );
+
         let ssr_pass = ScreenSpaceReflectionRenderPass::new(
             device,
-            config,
-            pp_compute_bgl,
-            &offscreen_surface,
-            depth_view.clone(),
-            normal_view.clone(),
-            material_view.clone(),
+            cache.bgl_post_process_compute(),
+            &shared_views,
+            &routes.ssr,
         );
 
+        let size = offscreen_surface.texture().size();
         let ssao_pass = ScreenSpaceAmbientOcclusionRenderPass::new(
             device,
-            config,
+            size.width,
+            size.height,
             cache.bgl_ssao_compute(),
             cache.bgl_ssao_apply_compute(),
-            offscreen_surface.view().clone(),
-            ssr_pass.output.view().clone(),
-            depth_view.clone(),
-            normal_view.clone(),
-            material_view.clone(),
+            &shared_views,
+            &routes.ssao,
         );
-
-        let bloom_settings = BloomSettings::from_engine_args();
 
         let bloom_pass = BloomRenderPass::new(
             device,
-            config,
-            bloom_compute_bgl,
-            offscreen_surface.view().clone(),
-            ssr_pass.output.view().clone(),
-            ssao_pass.output.view().clone(),
+            size.width,
+            size.height,
+            cache.bgl_bloom_compute(),
+            &routes.bloom,
             &bloom_settings,
         );
 
-        let fxaa_pass = FxaaRenderPass::new(
-            device,
-            config,
-            &pp_bgl,
-            offscreen_surface.view().clone(),
-            ssr_pass.output.view().clone(),
-            ssao_pass.output.view().clone(),
-            bloom_pass.output.view().clone(),
-            depth_view.clone(),
-            normal_view.clone(),
-            material_view.clone(),
-        );
+        let fxaa_pass = FxaaRenderPass::new(device, &pp_bgl, &shared_views, &routes.fxaa);
 
-        let final_uniforms = [
-            PostProcessData::new(
-                device,
-                pp_bgl.clone(),
-                offscreen_surface.view().clone(),
-                depth_view.clone(),
-                normal_view.clone(),
-                material_view.clone(),
-            ),
-            PostProcessData::new(
-                device,
-                pp_bgl.clone(),
-                ssr_pass.output.view().clone(),
-                depth_view.clone(),
-                normal_view.clone(),
-                material_view.clone(),
-            ),
-            PostProcessData::new(
-                device,
-                pp_bgl.clone(),
-                ssao_pass.output.view().clone(),
-                depth_view.clone(),
-                normal_view.clone(),
-                material_view.clone(),
-            ),
-            PostProcessData::new(
-                device,
-                pp_bgl.clone(),
-                bloom_pass.output.view().clone(),
-                depth_view.clone(),
-                normal_view.clone(),
-                material_view.clone(),
-            ),
-            PostProcessData::new(
-                device,
-                pp_bgl.clone(),
-                fxaa_pass.output.view().clone(),
-                depth_view.clone(),
-                normal_view.clone(),
-                material_view.clone(),
-            ),
-        ];
+        let final_pass = FinalRenderPass::new(device, &pp_bgl, &shared_views, &routes.final_pass);
 
         Self {
+            device: device.clone(),
             depth_texture,
             offscreen_surface,
+            final_surfaces,
+            post_process_surfaces,
+            g_normal: normal_texture,
+            g_material: material_texture,
+            g_velocity: velocity_texture,
+            shared_views,
             ssr_pass,
             ssao_pass,
             fxaa_pass,
             bloom_pass,
-            final_surfaces,
-            g_normal: normal_texture,
-            g_material: material_texture,
-            g_velocity: velocity_texture,
-            final_uniforms,
+            final_pass,
+            route_key: routing,
             bloom_settings,
             bloom_settings_dirty: false,
         }
@@ -206,6 +194,103 @@ impl RenderPipeline {
     #[inline]
     fn current_surface_index(frame_count: usize) -> usize {
         frame_count % 2
+    }
+
+    fn compose_routes(
+        key: PostProcessRouting,
+        base_view: TextureView,
+        post_a_view: TextureView,
+        post_b_view: TextureView,
+        final_a_view: TextureView,
+    ) -> ActivePostProcessRoutes {
+        let default_route = PostProcessRoute {
+            input_id: COLOR_ID_BASE,
+            output_id: COLOR_ID_POST_A,
+            input_color: base_view.clone(),
+            output_color: post_a_view.clone(),
+        };
+
+        let mut ssr = default_route.clone();
+        let mut ssao = default_route.clone();
+        let mut bloom = default_route.clone();
+        let mut fxaa = default_route.clone();
+
+        let mut current_id = COLOR_ID_BASE;
+        let mut current_view = base_view;
+        let mut write_to_a = true;
+
+        let mut next_output = || {
+            if write_to_a {
+                write_to_a = false;
+                (COLOR_ID_POST_A, post_a_view.clone())
+            } else {
+                write_to_a = true;
+                (COLOR_ID_POST_B, post_b_view.clone())
+            }
+        };
+
+        if key.run_ssr {
+            let (output_id, output_view) = next_output();
+            ssr = PostProcessRoute {
+                input_id: current_id,
+                output_id,
+                input_color: current_view.clone(),
+                output_color: output_view.clone(),
+            };
+            current_id = output_id;
+            current_view = output_view;
+        }
+
+        if key.run_ssao {
+            let (output_id, output_view) = next_output();
+            ssao = PostProcessRoute {
+                input_id: current_id,
+                output_id,
+                input_color: current_view.clone(),
+                output_color: output_view.clone(),
+            };
+            current_id = output_id;
+            current_view = output_view;
+        }
+
+        if key.run_bloom {
+            let (output_id, output_view) = next_output();
+            bloom = PostProcessRoute {
+                input_id: current_id,
+                output_id,
+                input_color: current_view.clone(),
+                output_color: output_view.clone(),
+            };
+            current_id = output_id;
+            current_view = output_view;
+        }
+
+        if key.run_fxaa {
+            let (output_id, output_view) = next_output();
+            fxaa = PostProcessRoute {
+                input_id: current_id,
+                output_id,
+                input_color: current_view.clone(),
+                output_color: output_view.clone(),
+            };
+            current_id = output_id;
+            current_view = output_view;
+        }
+
+        let final_pass = PostProcessRoute {
+            input_id: current_id,
+            output_id: COLOR_ID_FINAL_A,
+            input_color: current_view,
+            output_color: final_a_view,
+        };
+
+        ActivePostProcessRoutes {
+            ssr,
+            ssao,
+            bloom,
+            fxaa,
+            final_pass,
+        }
     }
 
     fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> Texture {
@@ -288,6 +373,67 @@ impl RenderPipeline {
         })
     }
 
+    fn rebuild_post_process_passes(&mut self, cache: &AssetCache, key: PostProcessRouting) {
+        let routes = Self::compose_routes(
+            key,
+            self.offscreen_surface.view().clone(),
+            self.post_process_surfaces[0].view().clone(),
+            self.post_process_surfaces[1].view().clone(),
+            self.final_surfaces[0].view().clone(),
+        );
+
+        self.ssr_pass = ScreenSpaceReflectionRenderPass::new(
+            &self.device,
+            cache.bgl_post_process_compute(),
+            &self.shared_views,
+            &routes.ssr,
+        );
+
+        let size = self.offscreen_surface.texture().size();
+        self.ssao_pass = ScreenSpaceAmbientOcclusionRenderPass::new(
+            &self.device,
+            size.width,
+            size.height,
+            cache.bgl_ssao_compute(),
+            cache.bgl_ssao_apply_compute(),
+            &self.shared_views,
+            &routes.ssao,
+        );
+
+        self.bloom_pass = BloomRenderPass::new(
+            &self.device,
+            size.width,
+            size.height,
+            cache.bgl_bloom_compute(),
+            &routes.bloom,
+            &self.bloom_settings,
+        );
+
+        self.fxaa_pass = FxaaRenderPass::new(
+            &self.device,
+            &cache.bgl_post_process(),
+            &self.shared_views,
+            &routes.fxaa,
+        );
+
+        self.final_pass = FinalRenderPass::new(
+            &self.device,
+            &cache.bgl_post_process(),
+            &self.shared_views,
+            &routes.final_pass,
+        );
+
+        self.route_key = key;
+        self.bloom_settings_dirty = false;
+    }
+
+    fn ensure_route_configuration(&mut self, cache: &AssetCache) {
+        let desired = PostProcessRouting::current();
+        if desired != self.route_key {
+            self.rebuild_post_process_passes(cache, desired);
+        }
+    }
+
     pub fn prepare_frame(
         &mut self,
         render_data: &mut RenderUniformData,
@@ -304,8 +450,11 @@ impl RenderPipeline {
         render_data.upload_camera_data(queue);
 
         if self.bloom_settings_dirty {
-            self.bloom_pass.update_settings(queue, &self.bloom_settings);
-            self.bloom_settings_dirty = false;
+            let desired = PostProcessRouting::current();
+            if desired == self.route_key {
+                self.bloom_pass.update_settings(queue, &self.bloom_settings);
+                self.bloom_settings_dirty = false;
+            }
         }
     }
 
@@ -316,63 +465,6 @@ impl RenderPipeline {
 
     pub fn bloom_settings(&self) -> &BloomSettings {
         &self.bloom_settings
-    }
-
-    fn final_uniform(&self, source: FinalSource) -> &PostProcessData {
-        &self.final_uniforms[source as usize]
-    }
-
-    pub fn render_post_process(
-        &mut self,
-        camera_render_data: &RenderUniformData,
-        encoder: &mut CommandEncoder,
-        cache: &AssetCache,
-    ) {
-        let mut source = SceneSource::Base;
-        if !EngineArgs::get().no_ssr {
-            self.ssr_pass.render(camera_render_data, encoder, cache);
-            source = SceneSource::Ssr;
-        }
-
-        if !EngineArgs::get().no_ssao {
-            let source_ssao = match source {
-                SceneSource::Base => SsaoInputSource::Base,
-                SceneSource::Ssr => SsaoInputSource::Ssr,
-                SceneSource::Ssao => SsaoInputSource::Ssr,
-                SceneSource::Bloom => SsaoInputSource::Ssr,
-            };
-            self.ssao_pass
-                .render(camera_render_data, encoder, cache, source_ssao);
-            source = SceneSource::Ssao;
-        }
-
-        if self.bloom_settings.enabled {
-            let source_bloom = match source {
-                SceneSource::Base => BloomInputSource::Base,
-                SceneSource::Ssr => BloomInputSource::Ssr,
-                SceneSource::Ssao => BloomInputSource::Ssao,
-                SceneSource::Bloom => BloomInputSource::Ssao,
-            };
-            self.bloom_pass.render(
-                camera_render_data,
-                encoder,
-                cache,
-                source_bloom,
-                &self.bloom_settings,
-            );
-            source = SceneSource::Bloom;
-        }
-
-        if let AntiAliasingMode::Fxaa = EngineArgs::aa_mode() {
-            let source_fxaa = match source {
-                SceneSource::Base => FxaaInputSource::Base,
-                SceneSource::Ssr => FxaaInputSource::Ssr,
-                SceneSource::Ssao => FxaaInputSource::Ssao,
-                SceneSource::Bloom => FxaaInputSource::Bloom,
-            };
-            self.fxaa_pass
-                .render(camera_render_data, encoder, cache, source_fxaa);
-        }
     }
 
     pub fn render_ui_onto_final_frame(
@@ -388,57 +480,65 @@ impl RenderPipeline {
         UiRenderPass::render(encoder, strobe, final_color.view(), viewport, cache, state);
     }
 
+    fn run_post_process_chain(
+        &mut self,
+        camera_render_data: &RenderUniformData,
+        encoder: &mut CommandEncoder,
+        cache: &AssetCache,
+        final_output: TextureView,
+    ) {
+        let mut ctx = PostProcessPassContext {
+            camera_render_data,
+            encoder,
+            cache,
+        };
+
+        let mut ping_index = 0usize;
+
+        if self.route_key.run_ssr {
+            let output_color = self.post_process_surfaces[ping_index].view();
+            self.ssr_pass.execute(&mut ctx, output_color);
+            ping_index = 1 - ping_index;
+        }
+
+        if self.route_key.run_ssao {
+            let output_color = self.post_process_surfaces[ping_index].view();
+            self.ssao_pass.execute(&mut ctx, output_color);
+            ping_index = 1 - ping_index;
+        }
+
+        if self.route_key.run_bloom {
+            let output_color = self.post_process_surfaces[ping_index].view();
+            self.bloom_pass.execute(&mut ctx, output_color);
+            ping_index = 1 - ping_index;
+        }
+
+        if self.route_key.run_fxaa {
+            let output_color = self.post_process_surfaces[ping_index].view();
+            self.fxaa_pass.execute(&mut ctx, output_color);
+        }
+
+        self.final_pass.execute(&mut ctx, &final_output);
+    }
+
     pub fn finalize_frame(
         &mut self,
         encoder: &mut CommandEncoder,
         cache: &AssetCache,
         context: FinalFrameContext<'_>,
     ) -> RenderedFrame {
+        self.ensure_route_configuration(cache);
+
         let current_idx = Self::current_surface_index(context.frame_count);
         let final_color = &self.final_surfaces[current_idx];
         let final_frame_texture = final_color.texture().clone();
 
-        let mut source = if EngineArgs::get().no_ssr {
-            FinalSource::Base
-        } else {
-            FinalSource::Ssr
-        };
-
-        if !EngineArgs::get().no_ssao {
-            source = FinalSource::Ssao;
-        }
-        if self.bloom_settings.enabled {
-            source = FinalSource::Bloom;
-        }
-        if let AntiAliasingMode::Fxaa = EngineArgs::aa_mode() {
-            source = FinalSource::Fxaa;
-        }
-
-        {
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Final Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: final_color.view(),
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                ..RenderPassDescriptor::default()
-            });
-
-            let post_shader = cache.shader_post_process();
-            let groups = post_shader.bind_groups();
-            pass.set_pipeline(post_shader.solid_pipeline());
-            pass.set_bind_group(groups.render, context.render_data.uniform.bind_group(), &[]);
-            if let Some(idx) = groups.post_process {
-                pass.set_bind_group(idx, self.final_uniform(source).uniform.bind_group(), &[]);
-            }
-            pass.draw(0..6, 0..1);
-        }
+        self.run_post_process_chain(
+            context.render_data,
+            encoder,
+            cache,
+            final_color.view().clone(),
+        );
 
         RenderedFrame {
             target: context.target,
