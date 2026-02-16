@@ -1,11 +1,12 @@
 use crate::cache::AssetCache;
+use crate::lighting::proxy::{LightProxy, LightType};
 use crate::passes::pipeline::RenderPipeline;
 use crate::rendering::FrameCtx;
 use crate::rendering::picking::PickingSurface;
-use crate::rendering::render_data::RenderUniformData;
+use crate::rendering::render_data::{RenderUniformData, SkyAtmosphereSettings, SkyboxMode};
 use glamx::UVec2;
 use std::time::{Duration, Instant};
-use syrillian_asset::HRenderTexture2D;
+use syrillian_asset::{HCubemap, HRenderTexture2D};
 use tracing::instrument;
 use wgpu::{Device, Queue, SurfaceConfiguration, TextureViewDescriptor};
 use winit::dpi::PhysicalSize;
@@ -45,6 +46,9 @@ pub struct RenderViewport {
     pub delta_time: Duration,
     pub last_frame_time: Instant,
     pub frame_count: usize,
+    desired_skybox: Option<HCubemap>,
+    resolved_skybox: Option<HCubemap>,
+    sky_mode: SkyboxMode,
 }
 
 impl RenderViewport {
@@ -59,7 +63,13 @@ impl RenderViewport {
         let render_bgl = cache.bgl_render();
 
         let picking_surface = PickingSurface::new(device, &config);
-        let render_data = RenderUniformData::empty(device, &render_bgl);
+        let fallback_skybox = cache.cubemap_fallback();
+        let render_data = RenderUniformData::empty(
+            device,
+            &render_bgl,
+            fallback_skybox.view.clone(),
+            fallback_skybox.sampler.clone(),
+        );
         let post_pipeline = RenderPipeline::new(device, cache, &config);
 
         RenderViewport {
@@ -72,6 +82,9 @@ impl RenderViewport {
             delta_time: Duration::default(),
             last_frame_time: Instant::now(),
             frame_count: 0,
+            desired_skybox: None,
+            resolved_skybox: None,
+            sky_mode: SkyboxMode::Cubemap,
         }
     }
 
@@ -110,6 +123,7 @@ impl RenderViewport {
 
     pub fn update_render_data(&mut self, queue: &Queue) {
         self.update_system_data(queue);
+        self.render_data.upload_sky_data(queue);
     }
 
     pub fn update_view_camera_data(&mut self, queue: &Queue) {
@@ -142,5 +156,60 @@ impl RenderViewport {
 
     pub fn frame_count(&self) -> usize {
         self.frame_count
+    }
+
+    pub fn set_skybox(&mut self, cubemap: Option<HCubemap>) {
+        self.desired_skybox = cubemap;
+    }
+
+    pub fn set_sky_mode(&mut self, mode: SkyboxMode) {
+        self.sky_mode = mode;
+        self.render_data.set_sky_mode(mode);
+    }
+
+    pub fn sky_mode(&self) -> SkyboxMode {
+        self.sky_mode
+    }
+
+    pub fn set_sky_atmosphere(&mut self, settings: SkyAtmosphereSettings) {
+        self.render_data.set_sky_settings(settings);
+    }
+
+    pub fn sync_sun_light(&mut self, light: Option<&LightProxy>) {
+        let Some(light) = light else {
+            return;
+        };
+
+        if LightType::try_from(light.type_id).ok() != Some(LightType::Sun) {
+            return;
+        }
+
+        self.render_data.sync_sun_light(light);
+    }
+
+    pub fn refresh_skybox_binding(&mut self, device: &Device, cache: &AssetCache) {
+        let resolved = self.desired_skybox.and_then(|handle| {
+            if cache.cubemap(handle).is_some() {
+                Some(handle)
+            } else {
+                None
+            }
+        });
+
+        if self.resolved_skybox == resolved {
+            return;
+        }
+
+        let skybox = resolved
+            .and_then(|handle| cache.cubemap(handle))
+            .unwrap_or_else(|| cache.cubemap_fallback());
+        let render_bgl = cache.bgl_render();
+        self.render_data.rebuild_bind_group(
+            device,
+            &render_bgl,
+            skybox.view.clone(),
+            skybox.sampler.clone(),
+        );
+        self.resolved_skybox = resolved;
     }
 }

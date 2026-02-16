@@ -52,6 +52,7 @@ impl LightManager {
         self.shadow_assignments.clear();
 
         let render_bgl = cache.bgl_render();
+        let fallback_skybox = cache.cubemap_fallback();
 
         let mut next_layer = 0;
         for (idx, light) in self.proxies.iter_mut().enumerate() {
@@ -87,8 +88,12 @@ impl LightManager {
 
             while self.shadow_assignments.len() >= self.render_data.len() {
                 profiling::scope!("add render uniform");
-                self.render_data
-                    .push(RenderUniformData::empty(device, &render_bgl));
+                self.render_data.push(RenderUniformData::empty(
+                    device,
+                    &render_bgl,
+                    fallback_skybox.view.clone(),
+                    fallback_skybox.sampler.clone(),
+                ));
             }
 
             next_layer += required_layers;
@@ -185,6 +190,18 @@ impl LightManager {
 
     pub fn light(&self, index: usize) -> Option<&LightProxy> {
         self.proxies.get(index)
+    }
+
+    pub fn primary_sun(&self) -> Option<LightProxy> {
+        self.proxies
+            .iter()
+            .filter(|proxy| LightType::try_from(proxy.type_id).ok() == Some(LightType::Sun))
+            .max_by(|a, b| {
+                a.intensity
+                    .partial_cmp(&b.intensity)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
     }
 
     #[profiling::function]

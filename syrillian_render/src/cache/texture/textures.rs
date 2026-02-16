@@ -155,7 +155,7 @@ impl TextureAsset for Cubemap {
     }
 
     fn mip_level_count(&self) -> u32 {
-        1
+        self.mip_level_count.max(1)
     }
 
     fn sample_count(&self) -> u32 {

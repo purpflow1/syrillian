@@ -15,7 +15,7 @@ use crate::proxies::{SceneProxy, SceneProxyBinding};
 use crate::rendering::debug_renderer::DebugRenderer;
 use crate::rendering::message::{GBufferDebugTargets, ProxyUpdateCommand, RenderMsg};
 use crate::rendering::picking::{PickRequest, PickResult, color_bytes_to_hash};
-use crate::rendering::render_data::{CameraUniform, RenderUniformData};
+use crate::rendering::render_data::{CameraUniform, RenderUniformData, SkyboxMode};
 use crate::rendering::state::State;
 use crate::rendering::texture_export::{TextureExportError, save_texture_to_png};
 use crate::rendering::viewport::{RenderViewport, ViewportId};
@@ -31,8 +31,8 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::mem;
 use std::sync::Arc;
-use syrillian_asset::HTexture2D;
 use syrillian_asset::store::AssetStore;
+use syrillian_asset::{HShader, HTexture2D};
 use syrillian_utils::frustum::FrustumSide;
 use syrillian_utils::{EngineArgs, Frustum, TypedComponentId, debug_panic};
 use tracing::{info, instrument, trace, warn};
@@ -224,12 +224,14 @@ impl Renderer {
         }
         self.proxies = proxies;
 
-        for vp in self.viewports.values_mut() {
-            vp.update_render_data(&self.state.queue);
-        }
-
         self.lights
             .update(&self.cache, &self.state.queue, &self.state.device);
+
+        let primary_sun = self.lights.primary_sun();
+        for vp in self.viewports.values_mut() {
+            vp.sync_sun_light(primary_sun.as_ref());
+            vp.update_render_data(&self.state.queue);
+        }
     }
 
     #[instrument(skip_all)]
@@ -247,6 +249,8 @@ impl Renderer {
         if cfg!(debug_assertions) && refreshed_count != 0 {
             trace!("Refreshed cache elements {}", refreshed_count);
         }
+
+        viewport.refresh_skybox_binding(&self.state.device, &self.cache);
 
         let mut ctx = viewport.begin_render();
         let frame_count = viewport.frame_count();
@@ -547,6 +551,11 @@ impl Renderer {
             });
 
         {
+            let mut pass = self.prepare_skybox_render_pass(&mut encoder, viewport);
+            self.draw_skybox_background(viewport, &mut pass);
+        }
+
+        {
             let pass = self.prepare_main_render_pass(&mut encoder, viewport, ctx);
 
             self.render_scene(
@@ -559,6 +568,32 @@ impl Renderer {
         }
 
         self.state.queue.submit(Some(encoder.finish()));
+    }
+
+    fn draw_skybox_background<'a>(&self, viewport: &RenderViewport, pass: &mut RenderPass<'a>) {
+        let shader = match viewport.sky_mode() {
+            SkyboxMode::Cubemap => self.cache.shader(HShader::SKYBOX),
+            SkyboxMode::Procedural => self.cache.shader(HShader::SKYBOX_PROCEDURAL),
+        };
+        let groups = shader.bind_groups();
+
+        pass.set_pipeline(shader.solid_pipeline());
+        pass.set_bind_group(
+            groups.render,
+            viewport.render_data.uniform.bind_group(),
+            &[],
+        );
+        if let Some(light) = groups.light {
+            pass.set_bind_group(light, self.lights.uniform().bind_group(), &[]);
+        }
+        if let Some(shadow) = groups.shadow {
+            pass.set_bind_group(
+                shadow,
+                self.lights.placeholder_shadow_uniform().bind_group(),
+                &[],
+            );
+        }
+        pass.draw(0..6, 0..1);
     }
 
     #[instrument(skip_all)]
@@ -795,6 +830,21 @@ impl Renderer {
                     self.gbuffer_debug.remove(&target);
                 }
             }
+            RenderMsg::SetSkybox(target, cubemap) => {
+                if let Some(viewport) = self.viewports.get_mut(&target) {
+                    viewport.set_skybox(cubemap);
+                }
+            }
+            RenderMsg::SetSkyboxMode(target, mode) => {
+                if let Some(viewport) = self.viewports.get_mut(&target) {
+                    viewport.set_sky_mode(mode);
+                }
+            }
+            RenderMsg::SetSkyAtmosphere(target, settings) => {
+                if let Some(viewport) = self.viewports.get_mut(&target) {
+                    viewport.set_sky_atmosphere(settings);
+                }
+            }
             RenderMsg::UpdateStrobe(frame) => {
                 self.strobe.borrow_mut().update_frame(frame);
             }
@@ -901,7 +951,7 @@ impl Renderer {
                     depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
+                        load: LoadOp::Load,
                         store: StoreOp::Store,
                     },
                 }),
@@ -932,6 +982,28 @@ impl Renderer {
                 }),
                 stencil_ops: None,
             }),
+            ..RenderPassDescriptor::default()
+        })
+    }
+
+    fn prepare_skybox_render_pass<'a>(
+        &self,
+        encoder: &'a mut CommandEncoder,
+        viewport: &RenderViewport,
+    ) -> RenderPass<'a> {
+        let color_view = viewport.render_pipeline.offscreen_surface.view();
+        encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("Skybox Render Pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: color_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
             ..RenderPassDescriptor::default()
         })
     }

@@ -1,5 +1,5 @@
-const PI: f32 = 3.14159265359;
-const AMBIENT_STRENGTH: f32 = 0.1;
+const AMBIENT_STRENGTH: f32 = 0.0;
+const IBL_STRENGTH: f32 = 1.0;
 const EPS: f32 = 1e-7;
 
 // orthonormalize t against n to build a stable tbn basis
@@ -72,6 +72,86 @@ fn brdf_term(
     let diff = diffuse_lambert(base) * kD * NdotL;
 
     return diff + spec;
+}
+
+fn fresnel_schlick_roughness(NdotV: f32, F0: vec3<f32>, roughness: f32) -> vec3<f32> {
+    let x = 1.0 - saturate(NdotV);
+    let x2 = x * x;
+    let x5 = x2 * x2 * x;
+
+    let F90 = max(vec3<f32>(1.0 - roughness), F0);
+    return F0 + (F90 - F0) * x5;
+}
+
+fn env_brdf_approx(roughness: f32, NdotV: f32) -> vec2<f32> {
+    let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4<f32>( 1.0,  0.0425,  1.04, -0.04);
+    let r = roughness * c0 + c1;
+
+    let a004 = min(r.x * r.x, exp2(-9.28 * saturate(NdotV))) * r.x + r.y;
+    return vec2<f32>(-1.04, 1.04) * a004 + r.zw;
+}
+
+fn ibl_term(
+    N: vec3<f32>,
+    V: vec3<f32>,
+    base: vec3<f32>,
+    metallic: f32,
+    roughness: f32
+) -> vec3<f32> {
+    let Nn = normalize(N);
+    let Vn = normalize(V);
+
+    let perceptual_roughness = clamp(roughness, 0.04, 1.0);
+    let NdotV = saturate(dot(Nn, Vn));
+
+    let F0 = mix(vec3<f32>(0.04), base, metallic);
+
+    let Fd = fresnel_schlick_roughness(NdotV, F0, perceptual_roughness);
+    let kD = (vec3<f32>(1.0) - Fd) * (1.0 - metallic);
+
+    let mip_count = f32(textureNumLevels(skybox_map));
+    let max_mip = max(mip_count - 1.0, 0.0);
+
+    let diffuse_lod = max(max_mip - 2.0, 0.0);
+    let env_diffuse = textureSampleLevel(skybox_map, skybox_sampler, Nn, diffuse_lod).rgb;
+
+    let R = reflect(-Vn, Nn);
+    let spec_lod = (perceptual_roughness * perceptual_roughness) * max_mip;
+    let prefiltered = textureSampleLevel(skybox_map, skybox_sampler, R, spec_lod).rgb;
+
+    let brdf = env_brdf_approx(perceptual_roughness, NdotV);
+    let specular = prefiltered * (F0 * brdf.x + brdf.y);
+
+    // if using real irradiance later, this becomes straight passthrough
+    let diffuse = env_diffuse * base * kD;
+
+    return (diffuse + specular) * IBL_STRENGTH;
+}
+
+fn eval_sky_sun(
+    N: vec3<f32>,
+    V: vec3<f32>,
+    base: vec3<f32>,
+    metallic: f32,
+    roughness: f32
+) -> vec3<f32> {
+    let strength = max(sky.sun_strength, 0.0);
+    if (strength <= 0.0) { return vec3<f32>(0.0); }
+
+    let L = sky_sun_direction();
+    if (L.y <= 0.0) { return vec3<f32>(0.0); }
+
+    let NdotL = dot(N, L);
+    if (NdotL <= 0.0) { return vec3<f32>(0.0); }
+
+    let T_sun = sun_transmittance_rgb(L);
+
+    let sun_rgb = sky_sun_color_base(L) * T_sun;
+
+    let brdf = brdf_term(N, V, L, base, metallic, roughness);
+    let radiance = sun_rgb * strength;
+    return brdf * radiance;
 }
 
 // ------------ Attenuation -------------
@@ -266,16 +346,6 @@ fn eval_point(
     return brdf * radiance;
 }
 
-fn eval_sun(
-    _in_pos: vec3<f32>, N: vec3<f32>, V: vec3<f32>,
-    base: vec3<f32>, metallic: f32, roughness: f32, light: Light
-) -> vec3<f32> {
-    let L = safe_normalize(-light.direction);
-    let brdf = brdf_term(N, V, L, base, metallic, roughness);
-    let radiance = light.color * light.intensity;
-    return brdf * radiance;
-}
-
 fn pbr_fragment(
     in: FInput,
     base_rgba: vec4<f32>,
@@ -294,8 +364,6 @@ fn pbr_fragment(
     let metallic = clamp(metallic_in, 0.0, 1.0);
     let roughness = clamp(roughness_in, 0.045, 1.0);
 
-    var Lo = base;
-
     // World normal
     let N = safe_normalize(normal_in);
     let V = safe_normalize(camera.position - in.position);   // to viewer
@@ -308,9 +376,13 @@ fn pbr_fragment(
         return out;
     }
 
-    if lit != 0 {
-        // start with a dim ambient term (energy-aware)
-        Lo *= (AMBIENT_STRENGTH * (1.0 - 0.04)); // tiny spec energy loss
+    var Lo = vec3<f32>(0.0);
+
+    if lit == 0 {
+        Lo = base;
+    } else {
+        Lo += ibl_term(N, V, base, metallic, roughness);
+        Lo += base * (AMBIENT_STRENGTH * (1.0 - 0.04));
     }
 
     let can_cast_shadows = cast_shadows != 0;
@@ -322,11 +394,13 @@ fn pbr_fragment(
         let Ld = lights[i];
         if (Ld.type_id == LIGHT_TYPE_POINT) {
             Lo += eval_point(in.position, N, V, base, metallic, roughness, Ld, can_cast_shadows);
-        } else if (Ld.type_id == LIGHT_TYPE_SUN) {
-            Lo += eval_sun(in.position, N, V, base, metallic, roughness, Ld);
         } else if (Ld.type_id == LIGHT_TYPE_SPOT) {
             Lo += eval_spot(in.position, N, V, base, metallic, roughness, Ld, can_cast_shadows);
         }
+    }
+
+    if (lit != 0) {
+        Lo += eval_sky_sun(N, V, base, metallic, roughness);
     }
 
     out.out_color = vec4(Lo, base_rgba.a * alpha_in);

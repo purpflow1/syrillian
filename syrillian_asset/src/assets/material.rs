@@ -95,7 +95,7 @@ impl Material {
     pub fn shader_set(&self) -> MaterialShaderSet {
         match self {
             Material::Default(_) => MaterialShaderSet {
-                base: HShader::DIM3,
+                base: HShader::DIM3_GEN_LIT,
                 picking: HShader::DIM3_PICKING,
                 shadow: HShader::DIM3_SHADOW,
             },

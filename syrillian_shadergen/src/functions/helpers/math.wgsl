@@ -1,3 +1,6 @@
+const PI: f32 = 3.14159265359;
+const RAD_TO_DEG: f32 = 57.29577951308232;
+
 fn sum4(v: vec4<f32>) -> f32 { return v.x + v.y + v.z + v.w; }
 fn safe_rsqrt(x: f32) -> f32 { return inverseSqrt(max(x, 1e-8)); }
 fn safe_normalize(v: vec3<f32>) -> vec3<f32> { return v * safe_rsqrt(dot(v, v)); }

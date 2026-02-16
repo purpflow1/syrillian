@@ -132,7 +132,10 @@ impl H<Shader> {
     pub const DEBUG_LIGHT_ID: u32 = 16;
     pub const DIM3_SHADOW_ID: u32 = 17;
     pub const POST_PROCESS_FXAA_ID: u32 = 18;
-    pub const MAX_BUILTIN_ID: u32 = 18;
+    pub const SKYBOX_ID: u32 = 19;
+    pub const SKYBOX_PROCEDURAL_ID: u32 = 20;
+    pub const DIM3_GEN_LIT_ID: u32 = 21;
+    pub const MAX_BUILTIN_ID: u32 = 21;
 
     // The fallback shader if a pipeline fails
     pub const FALLBACK: H<Shader> = H::new(Self::FALLBACK_ID);
@@ -182,6 +185,9 @@ impl H<Shader> {
     pub const DEBUG_TEXT2D_GEOMETRY: H<Shader> = H::new(Self::DEBUG_TEXT2D_GEOMETRY_ID);
     pub const DEBUG_TEXT3D_GEOMETRY: H<Shader> = H::new(Self::DEBUG_TEXT3D_GEOMETRY_ID);
     pub const DEBUG_LIGHT: H<Shader> = H::new(Self::DEBUG_LIGHT_ID);
+    pub const SKYBOX: H<Shader> = H::new(Self::SKYBOX_ID);
+    pub const DIM3_GEN_LIT: H<Shader> = H::new(Self::DIM3_GEN_LIT_ID);
+    pub const SKYBOX_PROCEDURAL: H<Shader> = H::new(Self::SKYBOX_PROCEDURAL_ID);
 }
 
 const SHADER_FALLBACK3D: &str = include_str!("shaders/fallback_shader3d.wgsl");
@@ -193,6 +199,8 @@ const SHADER_TEXT3D: &str = include_str!("shaders/text3d.wgsl");
 const SHADER_TEXT3D_PICKER: &str = include_str!("shaders/picking_text3d.wgsl");
 const SHADER_LINE2D: &str = include_str!("shaders/line.wgsl");
 const SHADER_POST_PROCESS_FXAA: &str = include_str!("shaders/post_process_fxaa.wgsl");
+const SHADER_SKYBOX: &str = include_str!("shaders/skybox.wgsl");
+const SHADER_SKYBOX_PROCEDURAL: &str = include_str!("shaders/skybox_procedural.wgsl");
 
 const DEBUG_EDGES_SHADER: &str = include_str!("shaders/debug/edges.wgsl");
 const DEBUG_VERTEX_NORMAL_SHADER: &str = include_str!("shaders/debug/vertex_normals.wgsl");
@@ -207,6 +215,7 @@ impl StoreDefaults for Shader {
             PostProcessCompiler::compile_post_process_fragment(&PostProcessPassthroughMaterial, 0);
         let mut pbr = PbrShader::default();
         let mesh3d = MaterialCompiler::compile_mesh(&mut pbr, 0, MeshPass::Base);
+        let mesh3d_gen_lit = mesh3d.clone();
         let mesh3d_picking = MaterialCompiler::compile_mesh_picking();
         let mesh3d_shadow = MaterialCompiler::compile_mesh(&mut pbr, 0, MeshPass::Shadow);
 
@@ -508,6 +517,45 @@ impl StoreDefaults for Shader {
             HShader::POST_PROCESS_FXAA_ID,
             Shader::new_post_process_fragment_linear("Post Process FXAA", SHADER_POST_PROCESS_FXAA)
         );
+
+        store_add_checked!(
+            store,
+            HShader::SKYBOX_ID,
+            Shader::builder()
+                .shader_type(ShaderType::Custom)
+                .name("Skybox Background Shader")
+                .code(ShaderCode::Full(SHADER_SKYBOX.to_string()))
+                .vertex_buffers(&[])
+                .color_target(ONLY_COLOR_TARGET)
+                .depth_enabled(false)
+                .build()
+        );
+
+        store_add_checked!(
+            store,
+            HShader::SKYBOX_PROCEDURAL_ID,
+            Shader::builder()
+                .shader_type(ShaderType::Custom)
+                .name("Skybox Procedural Shader")
+                .code(ShaderCode::Full(SHADER_SKYBOX_PROCEDURAL.to_string()))
+                .vertex_buffers(&[])
+                .color_target(ONLY_COLOR_TARGET)
+                .depth_enabled(false)
+                .build()
+        );
+
+        store_add_checked!(
+            store,
+            HShader::DIM3_GEN_LIT_ID,
+            Shader::builder()
+                .shader_type(ShaderType::Custom)
+                .name("mesh3d_gen_lit")
+                .code(ShaderCode::Full(mesh3d_gen_lit))
+                .immediate_size(material_immediates)
+                .material_layout(default_layout.clone())
+                .material_groups(material_groups.clone())
+                .build()
+        );
     }
 }
 
@@ -532,6 +580,9 @@ impl StoreType for Shader {
             HShader::TEXT_3D_ID => "3D Text Shader",
             HShader::POST_PROCESS_ID => "Post Process Shader",
             HShader::POST_PROCESS_FXAA_ID => "Post Process FXAA Shader",
+            HShader::SKYBOX_ID => "Skybox Background Shader",
+            HShader::SKYBOX_PROCEDURAL_ID => "Skybox Procedural Shader",
+            HShader::DIM3_GEN_LIT_ID => "mesh3d_gen_lit",
 
             HShader::DEBUG_EDGES_ID => "Debug Edges Shader",
             HShader::DEBUG_VERTEX_NORMALS_ID => "Debug Vertex Normals Shader",

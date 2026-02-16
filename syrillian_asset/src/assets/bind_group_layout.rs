@@ -75,7 +75,56 @@ impl StoreType for BGL {
     }
 }
 
-const RENDER_ENTRIES: [BindGroupLayoutEntry; 2] = [
+const RENDER_ENTRIES: [BindGroupLayoutEntry; 5] = [
+    BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::all(),
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 1,
+        visibility: ShaderStages::all(),
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 2,
+        visibility: ShaderStages::all(),
+        ty: BindingType::Texture {
+            sample_type: TextureSampleType::Float { filterable: true },
+            view_dimension: TextureViewDimension::Cube,
+            multisampled: false,
+        },
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 3,
+        visibility: ShaderStages::all(),
+        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+        count: None,
+    },
+    BindGroupLayoutEntry {
+        binding: 4,
+        visibility: ShaderStages::all(),
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    },
+];
+
+const MODEL_ENTRIES: [BindGroupLayoutEntry; 2] = [
     BindGroupLayoutEntry {
         binding: 0,
         visibility: ShaderStages::all(),
@@ -556,7 +605,7 @@ impl StoreDefaults for BGL {
             HBGL::MODEL_ID,
             BGL {
                 label: HBGL::MODEL.ident(),
-                entries: RENDER_ENTRIES.to_vec()
+                entries: MODEL_ENTRIES.to_vec()
             }
         );
 

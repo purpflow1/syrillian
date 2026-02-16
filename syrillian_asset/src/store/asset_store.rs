@@ -40,7 +40,7 @@ impl AssetStore {
             compute_shaders: Arc::new(Store::populated()),
             textures: Arc::new(Store::populated()),
             texture_arrays: Arc::new(Store::empty()),
-            cubemaps: Arc::new(Store::empty()),
+            cubemaps: Arc::new(Store::populated()),
             render_textures: Arc::new(Store::empty()),
             render_texture_arrays: Arc::new(Store::empty()),
             render_cubemaps: Arc::new(Store::empty()),

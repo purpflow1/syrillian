@@ -108,32 +108,27 @@ impl ShaderGenerator {
                 out
             }
             ShaderKind::Custom => {
-                let has_render_group = source.contains("@group(0)");
-                if !has_render_group {
-                    out.push_str(RENDER_GROUP);
+                let mut imported = ImportedGroups {
+                    render: source.contains("@group(0)"),
+                    ..ImportedGroups::default()
+                };
+                if !imported.render {
+                    append_block_once(&mut out, &mut imported.render, RENDER_GROUP);
                     out.push('\n');
                 }
 
-                for line in source.lines() {
-                    let Some(import) = line.find("#use ") else {
-                        out.push_str(line);
-                        out.push('\n');
-                        continue;
-                    };
-
-                    let group = line[import + 5..].trim();
-                    match group {
-                        "model" => out.push_str(MODEL_GROUP),
-                        "material" => out.push_str(material_group),
-                        "material_textures" => out.push_str(material_textures_group),
-                        "light" | "shadow" => out.push_str(LIGHT_GROUP),
-                        "default_vertex" => push_default_mesh_groups(&mut out),
-                        "post_process" => out.push_str(POST_PROCESS_GROUP),
-                        "render" => out.push_str(RENDER_GROUP),
-                        _ => {}
-                    }
-                    out.push('\n');
-                }
+                expand_use_directives(
+                    &mut out,
+                    source,
+                    UseDirectiveOptions {
+                        material_group,
+                        material_textures_group,
+                        copy_non_directive_lines: true,
+                        allow_default_vertex: true,
+                        append_newline_after_directive: true,
+                    },
+                    &mut imported,
+                );
 
                 if fragment_only {
                     out.push_str(MESH3D_VERTEX);
@@ -143,27 +138,20 @@ impl ShaderGenerator {
                 out
             }
             ShaderKind::Compute => {
-                let uses_directive = source.lines().any(|line| line.contains("#use "));
-
-                if uses_directive {
-                    for line in source.lines() {
-                        let Some(import) = line.find("#use ") else {
-                            out.push_str(line);
-                            out.push('\n');
-                            continue;
-                        };
-
-                        let group = line[import + 5..].trim();
-                        match group {
-                            "render" => out.push_str(RENDER_GROUP),
-                            "model" => out.push_str(MODEL_GROUP),
-                            "material" => out.push_str(material_group),
-                            "material_textures" => out.push_str(material_textures_group),
-                            "light" | "shadow" => out.push_str(LIGHT_GROUP),
-                            "post_process" => out.push_str(POST_PROCESS_GROUP),
-                            _ => {}
-                        }
-                    }
+                if has_use_directive(source) {
+                    let mut imported = ImportedGroups::default();
+                    expand_use_directives(
+                        &mut out,
+                        source,
+                        UseDirectiveOptions {
+                            material_group,
+                            material_textures_group,
+                            copy_non_directive_lines: true,
+                            allow_default_vertex: false,
+                            append_newline_after_directive: false,
+                        },
+                        &mut imported,
+                    );
                 } else {
                     out.push_str(source);
                 }
@@ -261,6 +249,99 @@ pub fn assemble_compute_shader(source: &str) -> String {
 fn push_default_mesh_groups(out: &mut String) {
     out.push_str(MESH3D_GROUP);
     out.push('\n');
+}
+
+#[derive(Debug, Default)]
+struct ImportedGroups {
+    render: bool,
+    model: bool,
+    material: bool,
+    material_textures: bool,
+    light: bool,
+    default_vertex: bool,
+    post_process: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct UseDirectiveOptions<'a> {
+    material_group: &'a str,
+    material_textures_group: &'a str,
+    copy_non_directive_lines: bool,
+    allow_default_vertex: bool,
+    append_newline_after_directive: bool,
+}
+
+fn has_use_directive(source: &str) -> bool {
+    source.lines().any(|line| line.contains("#use "))
+}
+
+fn expand_use_directives(
+    out: &mut String,
+    source: &str,
+    options: UseDirectiveOptions<'_>,
+    imported: &mut ImportedGroups,
+) {
+    for line in source.lines() {
+        let Some(import) = line.find("#use ") else {
+            if options.copy_non_directive_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
+            continue;
+        };
+
+        let group = line[import + 5..].trim();
+        append_use_group(
+            out,
+            imported,
+            group,
+            options.material_group,
+            options.material_textures_group,
+            options.allow_default_vertex,
+        );
+
+        if options.append_newline_after_directive {
+            out.push('\n');
+        }
+    }
+}
+
+fn append_use_group(
+    out: &mut String,
+    imported: &mut ImportedGroups,
+    group: &str,
+    material_group: &str,
+    material_textures_group: &str,
+    allow_default_vertex: bool,
+) {
+    match group {
+        "render" => append_block_once(out, &mut imported.render, RENDER_GROUP),
+        "model" => append_block_once(out, &mut imported.model, MODEL_GROUP),
+        "material" => append_block_once(out, &mut imported.material, material_group),
+        "material_textures" => append_block_once(
+            out,
+            &mut imported.material_textures,
+            material_textures_group,
+        ),
+        "light" | "shadow" => append_block_once(out, &mut imported.light, LIGHT_GROUP),
+        "post_process" => append_block_once(out, &mut imported.post_process, POST_PROCESS_GROUP),
+        "default_vertex" if allow_default_vertex => {
+            if !imported.default_vertex {
+                push_default_mesh_groups(out);
+                imported.default_vertex = true;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn append_block_once(out: &mut String, is_included: &mut bool, block: &str) {
+    if *is_included {
+        return;
+    }
+
+    out.push_str(block);
+    *is_included = true;
 }
 
 fn append_compilation_output(out: &mut String, compiled: &ShaderCompilationOutput) {

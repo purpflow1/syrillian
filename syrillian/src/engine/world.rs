@@ -22,7 +22,7 @@ use std::sync::Arc;
 use syrillian_asset::store::Store;
 use syrillian_asset::{AssetStore, ComputeShader};
 use syrillian_asset::{
-    BGL, Cubemap, Material, MaterialInstance, Mesh, RenderCubemap, RenderTexture2D,
+    BGL, Cubemap, HCubemap, Material, MaterialInstance, Mesh, RenderCubemap, RenderTexture2D,
     RenderTexture2DArray, Shader, Sound, Texture2D, Texture2DArray,
 };
 use syrillian_render::strobe::StrobeFrame;
@@ -37,6 +37,7 @@ use syrillian_macros::Reflect;
 use syrillian_render::rendering::CPUDrawCtx;
 use syrillian_render::rendering::message::{GBufferDebugTargets, RenderMsg};
 use syrillian_render::rendering::picking::{PickRequest, PickResult};
+use syrillian_render::rendering::render_data::{SkyAtmosphereSettings, SkyboxMode};
 use syrillian_render::rendering::viewport::ViewportId;
 use syrillian_utils::EngineArgs;
 use winit::dpi::PhysicalSize;
@@ -949,6 +950,43 @@ impl World {
             .render_tx
             .send(RenderMsg::SetGBufferDebug(target, targets))
             .is_ok()
+    }
+
+    pub fn set_viewport_skybox(&self, target: ViewportId, cubemap: Option<HCubemap>) -> bool {
+        self.channels
+            .render_tx
+            .send(RenderMsg::SetSkybox(target, cubemap))
+            .is_ok()
+    }
+
+    pub fn set_skybox(&self, cubemap: Option<HCubemap>) -> bool {
+        self.set_viewport_skybox(ViewportId::PRIMARY, cubemap)
+    }
+
+    pub fn set_viewport_skybox_mode(&self, target: ViewportId, mode: SkyboxMode) -> bool {
+        self.channels
+            .render_tx
+            .send(RenderMsg::SetSkyboxMode(target, mode))
+            .is_ok()
+    }
+
+    pub fn set_skybox_mode(&self, mode: SkyboxMode) -> bool {
+        self.set_viewport_skybox_mode(ViewportId::PRIMARY, mode)
+    }
+
+    pub fn set_viewport_sky_atmosphere(
+        &self,
+        target: ViewportId,
+        settings: SkyAtmosphereSettings,
+    ) -> bool {
+        self.channels
+            .render_tx
+            .send(RenderMsg::SetSkyAtmosphere(target, settings))
+            .is_ok()
+    }
+
+    pub fn set_sky_atmosphere(&self, settings: SkyAtmosphereSettings) -> bool {
+        self.set_viewport_sky_atmosphere(ViewportId::PRIMARY, settings)
     }
 
     /// Prints information about all game objects in the world to the log

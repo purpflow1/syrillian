@@ -3,13 +3,14 @@ use crate::lighting::proxy::LightProxy;
 use crate::proxies::SceneProxy;
 use crate::rendering::picking::PickRequest;
 use crate::rendering::render_data::CameraUniform;
+use crate::rendering::render_data::{SkyAtmosphereSettings, SkyboxMode};
 use crate::rendering::viewport::ViewportId;
 use crate::strobe::StrobeFrame;
 use crossbeam_channel::Sender;
 use glamx::Affine3A;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use syrillian_asset::HTexture2D;
+use syrillian_asset::{HCubemap, HTexture2D};
 use syrillian_utils::TypedComponentId;
 
 #[derive(Debug, Clone, Copy)]
@@ -37,6 +38,9 @@ pub enum RenderMsg {
     CapturePickingTexture(ViewportId, PathBuf),
     CaptureTexture(HTexture2D, PathBuf),
     SetGBufferDebug(ViewportId, Option<GBufferDebugTargets>),
+    SetSkybox(ViewportId, Option<HCubemap>),
+    SetSkyboxMode(ViewportId, SkyboxMode),
+    SetSkyAtmosphere(ViewportId, SkyAtmosphereSettings),
     UpdateStrobe(StrobeFrame),
     FrameEnd(ViewportId, Sender<()>),
 }
@@ -58,6 +62,9 @@ impl Debug for RenderMsg {
             RenderMsg::CapturePickingTexture(_, _) => "Capture Picking Texture",
             RenderMsg::CaptureTexture(_, _) => "Capture Texture",
             RenderMsg::SetGBufferDebug(_, _) => "Set GBuffer Debug",
+            RenderMsg::SetSkybox(_, _) => "Set Skybox",
+            RenderMsg::SetSkyboxMode(_, _) => "Set Skybox Mode",
+            RenderMsg::SetSkyAtmosphere(_, _) => "Set Sky Atmosphere",
             RenderMsg::UpdateStrobe(_) => "Update Strobe Draw List",
             RenderMsg::FrameEnd(_, _) => "Frame End",
         };

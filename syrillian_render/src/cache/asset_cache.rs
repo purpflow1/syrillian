@@ -131,6 +131,10 @@ impl AssetCache {
         self.cubemaps.try_get(handle, self)
     }
 
+    pub fn cubemap_fallback(&self) -> Arc<GpuTexture> {
+        self.cubemaps.get(HCubemap::FALLBACK, self)
+    }
+
     pub fn render_texture(&self, handle: HRenderTexture2D) -> Option<Arc<GpuTexture>> {
         self.render_textures.try_get(handle, self)
     }
