@@ -12,24 +12,34 @@ impl<F: Into<f32>> Mul<F> for BoundingBox {
     type Output = BoundingBox;
 
     fn mul(self, rhs: F) -> Self::Output {
-        let rhs = rhs.into();
+        let s = rhs.into();
+        let a = self.min * s;
+        let b = self.max * s;
         BoundingBox {
-            min: self.min * rhs,
-            max: self.max * rhs,
+            min: a.min(b),
+            max: a.max(b),
         }
     }
 }
 
 impl Default for BoundingBox {
     fn default() -> Self {
-        Self {
-            min: -Vec3::ONE,
-            max: Vec3::ONE,
-        }
+        Self::empty()
     }
 }
 
 impl BoundingBox {
+    pub const fn empty() -> Self {
+        Self {
+            min: Vec3::splat(f32::INFINITY),
+            max: Vec3::splat(f32::NEG_INFINITY),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.min.x > self.max.x || self.min.y > self.max.y || self.min.z > self.max.z
+    }
+
     /// The matrix is guaranteed to be affine
     pub fn transformed_affine(&self, transform: &Mat4) -> Self {
         let mut new_min = Vec3::splat(f32::INFINITY);

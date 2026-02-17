@@ -139,21 +139,20 @@ impl Mesh {
     }
 
     pub fn calculate_bounding_box(&self) -> BoundingBox {
-        if self.vertices().is_empty() {
-            return BoundingBox::default();
-        }
+        let verts = self.vertices();
+        let mut it = verts.iter();
 
-        let mut min = Vec3::splat(f32::INFINITY);
-        let mut max = Vec3::splat(f32::NEG_INFINITY);
+        let Some(first) = it.next() else {
+            return BoundingBox::empty();
+        };
 
-        for v in self.vertices() {
+        let mut min = first.position;
+        let mut max = first.position;
+
+        for v in it {
             let p = v.position;
-            min.x = min.x.min(p.x);
-            min.y = min.y.min(p.y);
-            min.z = min.z.min(p.z);
-            max.x = max.x.max(p.x);
-            max.y = max.y.max(p.y);
-            max.z = max.z.max(p.z);
+            min = min.min(p);
+            max = max.max(p);
         }
 
         BoundingBox { min, max }
