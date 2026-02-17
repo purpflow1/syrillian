@@ -21,6 +21,7 @@ struct InputState {
     mouse_pos: PhysicalPosition<f32>,
     mouse_delta: Vec2,
     is_locked: bool,
+    suppress_auto_cursor_lock: bool,
 }
 
 #[derive(Debug)]
@@ -234,6 +235,7 @@ impl InputManager {
         self.state.key_just_updated.clear();
         self.state.button_just_updated.clear();
         self.state.mouse_delta = Vec2::ZERO;
+        self.state.suppress_auto_cursor_lock = false;
         self.gamepad.poll();
     }
 
@@ -253,9 +255,17 @@ impl InputManager {
             return;
         }
 
+        if self.state().suppress_auto_cursor_lock {
+            return;
+        }
+
         if self.is_button_down(MouseButton::Left) {
             self.lock_cursor();
         }
+    }
+
+    pub fn suppress_auto_cursor_lock_for_frame(&mut self) {
+        self.state_mut().suppress_auto_cursor_lock = true;
     }
 
     pub fn auto_quit_on_escape(&mut self) {
