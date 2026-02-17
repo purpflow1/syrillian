@@ -366,12 +366,12 @@ fn lifecycle_parent_deletion_across_loops() {
         obj.remove_component(camera, &mut world);
     }
 
-    for obj in rotate_trim.iter().copied() {
+    for obj in rotate_trim.iter() {
         assert!(obj.get_component::<TestRotateComponent>().is_none());
         assert!(obj.get_component::<CameraComponent>().is_some());
     }
 
-    for obj in camera_trim.iter().copied() {
+    for obj in camera_trim.iter() {
         assert!(obj.get_component::<TestRotateComponent>().is_some());
         assert!(obj.get_component::<CameraComponent>().is_none());
     }
