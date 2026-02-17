@@ -544,14 +544,17 @@ impl GameObject {
     /// Removes a [`Component`] by id from this game object and the world.
     pub fn remove_component(&mut self, comp: impl Borrow<TypedComponentId>, world: &mut World) {
         let comp = *comp.borrow();
-        let removed = self
+        let removed: Vec<_> = self
             .components
             .extract_if(.., |c| c.ctx.tid == comp)
-            .count();
-        if removed > 1 {
+            .map(|c| c.ctx.tid)
+            .collect();
+        if removed.len() > 1 {
             debug_panic!("Removed more than one component by TID (which should be unique)");
         }
-        world.components.remove(comp);
+        for tid in removed {
+            world.schedule_component_removal(tid);
+        }
     }
 
     /// Returns an immutable reference to this game object's parent ID.
@@ -590,9 +593,16 @@ impl GameObject {
         }
 
         let world = self.world();
+        if world.is_in_component_phase() {
+            self.children.clear();
+            self.unlink();
+            world.schedule_object_removal(self.id);
+            return;
+        }
+
         for mut comp in self.components.drain(..) {
             comp.delete(world);
-            world.components.remove(&comp);
+            world.schedule_component_removal(comp.typed_id());
         }
 
         self.children.clear();

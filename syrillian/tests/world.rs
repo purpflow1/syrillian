@@ -1,6 +1,212 @@
+use std::cell::Cell;
 use syrillian::World;
+use syrillian::components::{CameraComponent, Component};
 use syrillian::core::EventType;
+use syrillian::core::GameObjectId;
+use syrillian::math::{Quat, Vec3};
 use web_time::Duration;
+
+thread_local! {
+    static TEST_WORLD_LOOP: Cell<u32> = const { Cell::new(0) };
+    static TOUCH_PARENT_UPDATES: Cell<u32> = const { Cell::new(0) };
+    static ADDED_COMPONENT_UPDATES: Cell<u32> = const { Cell::new(0) };
+    static REMOVABLE_COMPONENT_UPDATES: Cell<u32> = const { Cell::new(0) };
+}
+
+fn set_test_world_loop(loop_idx: u32) {
+    TEST_WORLD_LOOP.with(|slot| slot.set(loop_idx));
+}
+
+fn current_test_world_loop() -> u32 {
+    TEST_WORLD_LOOP.with(Cell::get)
+}
+
+fn reset_touch_parent_updates() {
+    TOUCH_PARENT_UPDATES.with(|slot| slot.set(0));
+}
+
+fn touch_parent_updates() -> u32 {
+    TOUCH_PARENT_UPDATES.with(Cell::get)
+}
+
+fn reset_added_component_updates() {
+    ADDED_COMPONENT_UPDATES.with(|slot| slot.set(0));
+}
+
+fn added_component_updates() -> u32 {
+    ADDED_COMPONENT_UPDATES.with(Cell::get)
+}
+
+fn reset_removable_component_updates() {
+    REMOVABLE_COMPONENT_UPDATES.with(|slot| slot.set(0));
+}
+
+fn removable_component_updates() -> u32 {
+    REMOVABLE_COMPONENT_UPDATES.with(Cell::get)
+}
+
+#[derive(Default)]
+struct TestRotateComponent;
+
+impl Component for TestRotateComponent {
+    fn update(&mut self, _world: &mut World) {
+        self.parent()
+            .transform
+            .rotate(Quat::from_axis_angle(Vec3::Y, 0.01));
+    }
+}
+
+#[derive(Default)]
+struct DeleteParentInInitComponent;
+
+impl Component for DeleteParentInInitComponent {
+    fn init(&mut self, _world: &mut World) {
+        self.parent().delete();
+    }
+}
+
+#[derive(Default)]
+struct DeleteParentInUpdateComponent;
+
+impl Component for DeleteParentInUpdateComponent {
+    fn update(&mut self, _world: &mut World) {
+        if current_test_world_loop() == 1 {
+            self.parent().delete();
+        }
+    }
+}
+
+#[derive(Default)]
+struct DeleteParentInLateUpdateComponent;
+
+impl Component for DeleteParentInLateUpdateComponent {
+    fn late_update(&mut self, _world: &mut World) {
+        if current_test_world_loop() == 2 {
+            self.parent().delete();
+        }
+    }
+}
+
+#[derive(Default)]
+struct DeleteParentInPostUpdateComponent;
+
+impl Component for DeleteParentInPostUpdateComponent {
+    fn post_update(&mut self, _world: &mut World) {
+        if current_test_world_loop() == 2 {
+            self.parent().delete();
+        }
+    }
+}
+
+#[derive(Default)]
+struct DeleteSelfInUpdateFirstComponent;
+
+impl Component for DeleteSelfInUpdateFirstComponent {
+    fn update(&mut self, _world: &mut World) {
+        self.parent().delete();
+    }
+}
+
+#[derive(Default)]
+struct TouchParentInUpdateComponent;
+
+impl Component for TouchParentInUpdateComponent {
+    fn update(&mut self, _world: &mut World) {
+        let _ = self.parent().name.len();
+        TOUCH_PARENT_UPDATES.with(|slot| slot.set(slot.get() + 1));
+    }
+}
+
+#[derive(Default)]
+struct AddedInUpdateComponent;
+
+impl Component for AddedInUpdateComponent {
+    fn update(&mut self, _world: &mut World) {
+        ADDED_COMPONENT_UPDATES.with(|slot| slot.set(slot.get() + 1));
+    }
+}
+
+#[derive(Default)]
+struct AddComponentInUpdateComponent {
+    added: bool,
+}
+
+impl Component for AddComponentInUpdateComponent {
+    fn update(&mut self, _world: &mut World) {
+        if self.added {
+            return;
+        }
+
+        self.parent().add_component::<AddedInUpdateComponent>();
+        self.added = true;
+    }
+}
+
+#[derive(Default)]
+struct RemovableInUpdateComponent;
+
+impl Component for RemovableInUpdateComponent {
+    fn update(&mut self, _world: &mut World) {
+        REMOVABLE_COMPONENT_UPDATES.with(|slot| slot.set(slot.get() + 1));
+    }
+}
+
+#[derive(Default)]
+struct RemoveSiblingInUpdateComponent {
+    removed: bool,
+}
+
+impl Component for RemoveSiblingInUpdateComponent {
+    fn update(&mut self, world: &mut World) {
+        if self.removed {
+            return;
+        }
+
+        let mut parent = self.parent();
+        if let Some(removable) = parent.get_component::<RemovableInUpdateComponent>() {
+            parent.remove_component(removable, world);
+            self.removed = true;
+        }
+    }
+}
+
+fn run_world_loop_normal(world: &mut World) {
+    world.fixed_update();
+    world.update();
+    world.post_update();
+    world.next_frame();
+}
+
+fn run_world_loop_post_then_update(world: &mut World) {
+    world.fixed_update();
+    world.post_update();
+    world.update();
+    world.next_frame();
+}
+
+fn alive_objects(world: &World) -> usize {
+    world.objects.values().filter(|obj| obj.is_alive()).count()
+}
+
+fn component_count<C: Component + 'static>(world: &World) -> usize {
+    world
+        .components
+        .values_of_type::<C>()
+        .map(|v| v.count())
+        .unwrap_or(0)
+}
+
+fn assert_all_alive(ids: &[GameObjectId]) {
+    for id in ids {
+        assert!(id.exists(), "expected object {:?} to be alive", id);
+    }
+}
+
+fn assert_all_deleted(ids: &[GameObjectId]) {
+    for id in ids {
+        assert!(!id.exists(), "expected object {:?} to be deleted", id);
+    }
+}
 
 #[test]
 fn new_object_add_find_delete() {
@@ -91,4 +297,153 @@ fn click_registration_toggles() {
     assert!(world.is_listening_for(obj, EventType::CLICK));
     obj.stop_notify_for(&mut world, EventType::CLICK);
     assert!(!world.is_listening_for(obj, EventType::CLICK));
+}
+
+#[test]
+fn lifecycle_parent_deletion_across_loops() {
+    let (mut world, _render_rx, _event_rx, _pick_tx) = World::fresh();
+    let mut objects = Vec::with_capacity(100);
+
+    for index in 0..100 {
+        let mut obj = world.new_object(format!("Lifecycle_{index}"));
+        world.add_child(obj);
+        obj.add_component::<TestRotateComponent>();
+        obj.add_component::<CameraComponent>();
+        objects.push(obj);
+    }
+
+    let init_delete = &objects[0..20];
+    let update_delete = &objects[20..40];
+    let late_delete = &objects[40..60];
+    let post_delete = &objects[60..80];
+    let survivors = &objects[80..100];
+
+    for mut obj in init_delete.iter().copied() {
+        obj.add_component::<DeleteParentInInitComponent>();
+    }
+    for mut obj in update_delete.iter().copied() {
+        obj.add_component::<DeleteParentInUpdateComponent>();
+    }
+    for mut obj in late_delete.iter().copied() {
+        obj.add_component::<DeleteParentInLateUpdateComponent>();
+    }
+    for mut obj in post_delete.iter().copied() {
+        obj.add_component::<DeleteParentInPostUpdateComponent>();
+    }
+
+    assert_eq!(alive_objects(&world), 80);
+    assert_eq!(component_count::<TestRotateComponent>(&world), 80);
+    assert_eq!(component_count::<CameraComponent>(&world), 80);
+    assert_all_deleted(init_delete);
+    assert_all_alive(update_delete);
+    assert_all_alive(late_delete);
+    assert_all_alive(post_delete);
+    assert_all_alive(survivors);
+
+    set_test_world_loop(0);
+    run_world_loop_normal(&mut world);
+
+    assert_eq!(alive_objects(&world), 80);
+    assert_all_alive(update_delete);
+    assert_all_alive(late_delete);
+    assert_all_alive(post_delete);
+    assert_all_alive(survivors);
+
+    let rotate_trim = &survivors[0..10];
+    let camera_trim = &survivors[10..15];
+
+    for mut obj in rotate_trim.iter().copied() {
+        let rotate = obj
+            .get_component::<TestRotateComponent>()
+            .expect("rotate component should exist before trim");
+        obj.remove_component(rotate, &mut world);
+    }
+
+    for mut obj in camera_trim.iter().copied() {
+        let camera = obj
+            .get_component::<CameraComponent>()
+            .expect("camera component should exist before trim");
+        obj.remove_component(camera, &mut world);
+    }
+
+    for obj in rotate_trim.iter().copied() {
+        assert!(obj.get_component::<TestRotateComponent>().is_none());
+        assert!(obj.get_component::<CameraComponent>().is_some());
+    }
+
+    for obj in camera_trim.iter().copied() {
+        assert!(obj.get_component::<TestRotateComponent>().is_some());
+        assert!(obj.get_component::<CameraComponent>().is_none());
+    }
+
+    assert_eq!(alive_objects(&world), 80);
+    assert_eq!(component_count::<TestRotateComponent>(&world), 70);
+    assert_eq!(component_count::<CameraComponent>(&world), 75);
+
+    set_test_world_loop(1);
+    run_world_loop_normal(&mut world);
+
+    assert_eq!(alive_objects(&world), 60);
+    assert_eq!(component_count::<TestRotateComponent>(&world), 50);
+    assert_eq!(component_count::<CameraComponent>(&world), 55);
+    assert_all_deleted(update_delete);
+    assert_all_alive(late_delete);
+    assert_all_alive(post_delete);
+    assert_all_alive(survivors);
+
+    set_test_world_loop(2);
+    run_world_loop_post_then_update(&mut world);
+
+    assert_eq!(alive_objects(&world), 20);
+    assert_eq!(component_count::<TestRotateComponent>(&world), 10);
+    assert_eq!(component_count::<CameraComponent>(&world), 15);
+    assert_all_deleted(late_delete);
+    assert_all_deleted(post_delete);
+    assert_all_alive(survivors);
+}
+
+#[test]
+fn repro_delete_during_component_iteration() {
+    let (mut world, _render_rx, _event_rx, _pick_tx) = World::fresh();
+    reset_touch_parent_updates();
+
+    let mut victim = world.new_object("Victim");
+    victim.add_component::<DeleteSelfInUpdateFirstComponent>();
+    victim.add_component::<TouchParentInUpdateComponent>();
+
+    world.update();
+
+    assert_eq!(touch_parent_updates(), 1);
+    assert!(world.get_object(victim).is_none());
+    assert!(!world.objects.contains_key(victim));
+}
+
+#[test]
+fn component_added_in_update_starts_next_phase() {
+    let (mut world, ..) = World::fresh();
+    reset_added_component_updates();
+
+    let mut obj = world.new_object("Adder");
+    obj.add_component::<AddComponentInUpdateComponent>();
+
+    world.update();
+    assert_eq!(added_component_updates(), 0);
+
+    world.update();
+    assert_eq!(added_component_updates(), 1);
+}
+
+#[test]
+fn removing_sibling_component_mid_phase_is_safe() {
+    let (mut world, ..) = World::fresh();
+    reset_removable_component_updates();
+
+    let mut obj = world.new_object("Remover");
+    obj.add_component::<RemoveSiblingInUpdateComponent>();
+    obj.add_component::<RemovableInUpdateComponent>();
+
+    world.update();
+
+    assert_eq!(removable_component_updates(), 0);
+    assert_eq!(component_count::<RemovableInUpdateComponent>(&world), 0);
 }

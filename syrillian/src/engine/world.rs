@@ -39,7 +39,7 @@ use syrillian_render::rendering::message::{GBufferDebugTargets, RenderMsg};
 use syrillian_render::rendering::picking::{PickRequest, PickResult};
 use syrillian_render::rendering::render_data::{SkyAtmosphereSettings, SkyboxMode};
 use syrillian_render::rendering::viewport::ViewportId;
-use syrillian_utils::EngineArgs;
+use syrillian_utils::{EngineArgs, TypedComponentId};
 use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
 
@@ -173,6 +173,10 @@ pub struct World {
     object_ref_counts: HashMap<GameObjectId, usize>,
     /// Objects that are awaiting final removal once all references drop
     pending_deletions: HashSet<GameObjectId>,
+    /// Components that are awaiting storage removal at the end of a component phase
+    pending_component_removals: HashSet<TypedComponentId>,
+    /// Tracks nested component phase execution depth.
+    component_phase_depth: usize,
     /// Objects registered for click notifications
     click_listeners: HashSet<GameObjectId>,
     /// Allocated hashes to keep them unique per object
@@ -214,6 +218,8 @@ impl World {
             children: vec![],
             object_ref_counts: HashMap::new(),
             pending_deletions: HashSet::new(),
+            pending_component_removals: HashSet::new(),
+            component_phase_depth: 0,
             click_listeners: HashSet::new(),
             object_hashes: HashSet::new(),
             main_active_camera: CWeak::null(),
@@ -358,7 +364,11 @@ impl World {
         }
 
         self.object_ref_counts.remove(&obj);
-        if self.pending_deletions.remove(&obj) {
+        if self.pending_deletions.contains(&obj) {
+            if self.is_in_component_phase() {
+                return;
+            }
+            self.finish_scheduled_object_teardown(obj);
             self.finalize_object_removal(obj);
         }
     }
@@ -375,6 +385,87 @@ impl World {
         self.objects.remove(obj);
     }
 
+    pub(crate) fn is_in_component_phase(&self) -> bool {
+        self.component_phase_depth != 0
+    }
+
+    fn begin_component_phase(&mut self) {
+        self.component_phase_depth += 1;
+    }
+
+    fn end_component_phase(&mut self) {
+        if self.component_phase_depth == 0 {
+            return;
+        }
+
+        self.component_phase_depth -= 1;
+        if self.component_phase_depth != 0 {
+            return;
+        }
+
+        self.flush_scheduled_component_removals();
+        self.flush_scheduled_object_removals();
+    }
+
+    pub(crate) fn schedule_component_removal(&mut self, ctid: TypedComponentId) {
+        if self.is_in_component_phase() {
+            self.pending_component_removals.insert(ctid);
+            return;
+        }
+
+        self.components.remove(ctid);
+    }
+
+    fn flush_scheduled_component_removals(&mut self) {
+        if self.pending_component_removals.is_empty() {
+            return;
+        }
+
+        let pending = take(&mut self.pending_component_removals);
+        for ctid in pending {
+            self.components.remove(ctid);
+        }
+    }
+
+    fn finish_scheduled_object_teardown(&mut self, obj: GameObjectId) {
+        let components = if let Some(object) = self.objects.get_mut(obj) {
+            if object.components.is_empty() {
+                return;
+            }
+            take(&mut object.components)
+        } else {
+            return;
+        };
+
+        let world = self as *mut World;
+        for mut comp in components {
+            unsafe {
+                comp.delete(&mut *world);
+            }
+            self.components.remove(&comp);
+        }
+    }
+
+    fn flush_scheduled_object_removals(&mut self) {
+        if self.is_in_component_phase() || self.pending_deletions.is_empty() {
+            return;
+        }
+
+        let pending: Vec<_> = self.pending_deletions.iter().copied().collect();
+        for obj in pending {
+            if !self.objects.contains_key(obj) {
+                self.pending_deletions.remove(&obj);
+                continue;
+            }
+
+            self.finish_scheduled_object_teardown(obj);
+
+            if self.object_ref_counts.get(&obj).copied().unwrap_or(0) == 0 {
+                self.finalize_object_removal(obj);
+            }
+        }
+    }
+
     #[profiling::function]
     pub(crate) fn schedule_object_removal(&mut self, obj: GameObjectId) {
         if !self.objects.contains_key(obj) {
@@ -385,6 +476,11 @@ impl World {
             return;
         }
 
+        if self.is_in_component_phase() {
+            return;
+        }
+
+        self.finish_scheduled_object_teardown(obj);
         if self.object_ref_counts.get(&obj).copied().unwrap_or(0) == 0 {
             self.finalize_object_removal(obj);
         }
@@ -643,12 +739,62 @@ impl World {
     where
         F: Fn(&mut dyn Component, &mut World),
     {
-        let world = unsafe { &mut *(self as *mut World) };
-        self.objects
-            .values()
-            .filter(|o| o.enabled.get())
-            .flat_map(|o| &o.components)
-            .for_each(|c| func(c.get_mut(), world))
+        self.begin_component_phase();
+
+        let object_ids: Vec<_> = self
+            .objects
+            .iter()
+            .filter_map(|(id, object)| (object.is_alive() && object.enabled.get()).then_some(id))
+            .collect();
+
+        let world = self as *mut World;
+        for object_id in object_ids {
+            let Some(object) = self.objects.get(object_id) else {
+                continue;
+            };
+            if !object.is_alive() || !object.is_enabled() {
+                continue;
+            }
+
+            let phase_end_len = object.components.len();
+            let mut idx = 0usize;
+
+            while idx < phase_end_len {
+                let current = {
+                    let Some(object) = self.objects.get(object_id) else {
+                        break;
+                    };
+
+                    if idx >= object.components.len() {
+                        break;
+                    }
+
+                    object.components[idx].clone()
+                };
+
+                let current_tid = current.typed_id();
+                if !self.pending_component_removals.contains(&current_tid) {
+                    unsafe {
+                        func(current.get_mut(), &mut *world);
+                    }
+                }
+
+                let same_component_in_slot = {
+                    match self.objects.get(object_id) {
+                        Some(object) if idx < object.components.len() => {
+                            object.components[idx].typed_id() == current_tid
+                        }
+                        _ => false,
+                    }
+                };
+
+                if same_component_in_slot {
+                    idx += 1;
+                }
+            }
+        }
+
+        self.end_component_phase();
     }
 
     /// Runs possible physics update if the timestep time has elapsed yet
@@ -1104,6 +1250,8 @@ impl World {
         self.object_hashes.clear();
         self.next_pick_request_id = 0;
         self.pending_deletions.clear();
+        self.pending_component_removals.clear();
+        self.component_phase_depth = 0;
     }
 }
 
