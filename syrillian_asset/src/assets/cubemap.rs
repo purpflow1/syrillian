@@ -140,7 +140,7 @@ impl StoreType for Cubemap {
     }
 
     fn is_builtin(handle: H<Self>) -> bool {
-        handle.id() <= HCubemap::MAX_BUILTIN_ID
+        handle.id() == HCubemap::MAX_BUILTIN_ID
     }
 }
 
